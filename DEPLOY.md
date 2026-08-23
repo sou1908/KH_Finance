@@ -164,13 +164,36 @@ any of these are correct, and you can leave the default alone:
 
 | Entry File / start command | Works |
 |---|---|
-| `server.js` | yes — the root entry point |
+| `server.cjs` | yes — **use this one on Hostinger.** See below |
+| `server.js` | yes, *unless* the host runs Phusion Passenger |
 | `npm start` | yes |
 | `server/index.js` | yes — `package.json`'s `main` |
 
-Three things in the repo help a platform detect this correctly, all committed:
-`server.js` at the root, `"main": "server/index.js"` in `package.json`, and a
-`Procfile` containing `web: npm start`.
+Four things in the repo help a platform detect this correctly, all committed:
+`server.cjs` and `server.js` at the root, `"main": "server/index.js"` in
+`package.json`, and a `Procfile` containing `web: npm start`.
+
+### Trap 3 — Passenger cannot require() an ES module
+
+Hostinger runs the app under Phusion Passenger, which loads its startup file
+with `require()`. This package is ESM (`"type": "module"`), so requiring
+`server.js` fails before a single line of it runs — including the boot log that
+exists to prove the process started.
+
+What you see is the proxy's own 503 on every page, an empty runtime log, and a
+build that succeeded perfectly. `npm install` ran, `vite build` wrote `dist/`,
+every setting in the panel is correct. Nothing in the deployment looks wrong,
+because nothing in the deployment *is* wrong.
+
+Raising the Node version does not fix it. Node 20 cannot `require()` an ES
+module at all, and Node 22's `require(esm)` refuses any module containing
+top-level `await` — which `server.js` uses. The entry point itself has to be
+CommonJS, which is what `server.cjs` is for: Passenger can `require()` it, and
+`import()` reaches the real ESM server from inside.
+
+The tell that you are here rather than somewhere else: `/status.html` loads but
+`/` does not. Passenger serves `<app root>/public` itself, so the static file
+answers while every route that needs Node returns 503.
 
 As a safety net, `npm start` builds the frontend itself if `dist/` is missing,
 so a platform that skips the build step still comes up.
