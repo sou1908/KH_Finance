@@ -156,9 +156,21 @@ If the framework preset is **Vite**, change it. Look for **Node.js**,
 Anything offering only a *static export* or an `out/`/`dist/` publish directory
 cannot run this app — server-rendered routes and an API cannot work that way.
 
-Two things in the repo help a platform detect this correctly, and are already
-committed: `"main": "server/index.js"` in `package.json`, and a `Procfile`
-containing `web: npm start`.
+### If the panel asks for an "Entry File"
+
+Panels commonly default this to `server.js` at the repository root. That file
+exists and works — it builds the frontend if needed, then starts the server. So
+any of these are correct, and you can leave the default alone:
+
+| Entry File / start command | Works |
+|---|---|
+| `server.js` | yes — the root entry point |
+| `npm start` | yes |
+| `server/index.js` | yes — `package.json`'s `main` |
+
+Three things in the repo help a platform detect this correctly, all committed:
+`server.js` at the root, `"main": "server/index.js"` in `package.json`, and a
+`Procfile` containing `web: npm start`.
 
 As a safety net, `npm start` builds the frontend itself if `dist/` is missing,
 so a platform that skips the build step still comes up.
