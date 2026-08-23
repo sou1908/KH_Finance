@@ -22,6 +22,9 @@ export function getPool() {
     charset: 'utf8mb4',
     waitForConnections: true,
     connectionLimit: 8,
+    // Fail fast. /health is the thing people load when the site is broken, and
+    // a health check that hangs for thirty seconds is no help at all.
+    connectTimeout: 8000,
     // Shared hosting caps concurrent connections tightly; queueing is kinder
     // than failing, but an unbounded queue just hides a stuck server.
     queueLimit: 50,

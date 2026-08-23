@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Kalope Homes — Deployment status</title>
+<!--
+  A deliberately dumb static file.
+
+  Vite copies public/ into dist/ untouched, so this page is served by the static
+  layer and needs no JavaScript from the app, no API and no database. That makes
+  *where it fails* the diagnosis:
+
+    this page 503s            → nothing is being served at all
+    loads, /api/ping fails    → static works, the Node process is not running
+    ping works, health fails  → Node is fine, the database config is wrong
+-->
+<style>
+  :root {
+    --ink: #16242a; --ink-2: #55666d; --ink-3: #86969d;
+    --rule: #dde5e8; --paper: #f2f6f7; --surface: #fff;
+    --deep: #0e2c34; --cyan: #2aa3b8; --orange: #ee7f2d;
+    --ok: #0f7355; --bad: #b03a2b; --wait: #9a6a12;
+    --mono: 'IBM Plex Mono', ui-monospace, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font: 15px/1.55 'Instrument Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  }
+  header { background: var(--deep); color: #fff; padding: 20px 22px; }
+  .wordmark { font-size: 20px; font-weight: 700; letter-spacing: -.02em; }
+  .wordmark .k { color: var(--orange); }
+  .homes { display: block; font-size: 10px; letter-spacing: .34em; text-transform: uppercase; color: var(--cyan); margin-top: 3px; }
+  .sub { display:block; margin-top: 10px; font-family: var(--mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: rgba(255,255,255,.45); }
+  main { max-width: 760px; margin: 0 auto; padding: 22px 16px 60px; }
+  .card { background: var(--surface); border: 1px solid var(--rule); border-radius: 3px; margin-bottom: 16px; }
+  .card h2 { margin: 0; padding: 13px 16px; border-bottom: 1px solid var(--rule); font-size: 14px; }
+  .card .body { padding: 16px; }
+  .check { display: flex; gap: 12px; align-items: flex-start; padding: 13px 16px; border-bottom: 1px solid #edf2f4; }
+  .check:last-child { border-bottom: 0; }
+  .dot { width: 11px; height: 11px; border-radius: 50%; margin-top: 5px; flex: 0 0 11px; background: var(--ink-3); }
+  .dot.ok { background: var(--ok); } .dot.bad { background: var(--bad); } .dot.wait { background: var(--wait); }
+  .check .name { font-weight: 600; }
+  .check .detail { color: var(--ink-2); font-size: 13.5px; margin-top: 2px; }
+  .check code, pre { font-family: var(--mono); }
+  pre { background: #f5f8f9; border: 1px solid var(--rule); border-radius: 3px; padding: 11px; overflow-x: auto; font-size: 12px; margin: 10px 0 0; white-space: pre-wrap; word-break: break-word; }
+  #verdict { border-left: 4px solid var(--ink-3); }
+  #verdict.ok { border-left-color: var(--ok); }
+  #verdict.bad { border-left-color: var(--bad); }
+  #verdict h3 { margin: 0 0 8px; font-size: 16px; }
+  #verdict ol { margin: 10px 0 0; padding-left: 20px; }
+  #verdict li { margin-bottom: 7px; }
+  .muted { color: var(--ink-3); font-size: 12.5px; }
+</style>
+</head>
+<body>
+<header>
+  <span class="wordmark"><span class="k">K</span>alope</span>
+  <span class="homes">Homes</span>
+  <span class="sub">Deployment status</span>
+</header>
+
+<main>
+  <div class="card" id="verdict-card">
+    <h2>Verdict</h2>
+    <div class="body" id="verdict"><em>Running checks…</em></div>
+  </div>
+
+  <div class="card">
+    <h2>Checks</h2>
+    <div id="checks">
+      <div class="check">
+        <span class="dot ok"></span>
+        <span>
+          <span class="name">Static files are being served</span>
+          <span class="detail">This page loaded, so the deployment published <code>dist/</code> and the web server is reachable.</span>
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Raw responses</h2>
+    <div class="body">
+      <div class="muted">Copy this whole block if you need to send it on.</div>
+      <pre id="raw">…</pre>
+    </div>
+  </div>
+</main>
+
+<script>
+(function () {
+  var checksEl = document.getElementById('checks')
+  var rawEl = document.getElementById('raw')
+  var verdictEl = document.getElementById('verdict')
+  var verdictCard = document.getElementById('verdict-card')
+  var raw = ['page loaded at ' + new Date().toISOString(), 'origin: ' + location.origin]
+
+  function addCheck(state, name, detail) {
+    var row = document.createElement('div')
+    row.className = 'check'
+    row.innerHTML =
+      '<span class="dot ' + state + '"></span><span><span class="name"></span>' +
+      '<span class="detail"></span></span>'
+    row.querySelector('.name').textContent = name
+    row.querySelector('.detail').textContent = detail
+    checksEl.appendChild(row)
+  }
+
+  function probe(path) {
+    var started = Date.now()
+    return fetch(path, { headers: { accept: 'application/json' }, cache: 'no-store' })
+      .then(function (res) {
+        return res.text().then(function (text) {
+          var body
+          try { body = JSON.parse(text) } catch (e) { body = null }
+          return { ok: res.ok, status: res.status, body: body, text: text, ms: Date.now() - started }
+        })
+      })
+      .catch(function (err) {
+        return { ok: false, status: 0, body: null, text: String(err), ms: Date.now() - started }
+      })
+  }
+
+  probe('/api/ping').then(function (ping) {
+    raw.push('', 'GET /api/ping  -> ' + ping.status + '  (' + ping.ms + 'ms)', ping.text.slice(0, 600))
+
+    // The page loaded but /api returned the app's own HTML: the API is not
+    // mounted, so the deployment is serving files without running the server.
+    var servedHtml = ping.text.indexOf('<!doctype') === 0 || ping.text.indexOf('<html') === 0
+
+    if (ping.body && ping.body.pong) {
+      addCheck('ok', 'The Node server is running',
+        'node ' + ping.body.node + ', listening on port ' + ping.body.port +
+        ', up for ' + ping.body.uptimeSeconds + 's.')
+      return probe('/api/health').then(function (health) {
+        raw.push('', 'GET /api/health -> ' + health.status + '  (' + health.ms + 'ms)', health.text.slice(0, 2000))
+        reportHealth(health)
+      })
+    }
+
+    // Anything other than a JSON pong means nothing is handling /api: either
+    // the app's own HTML came back (static serving with a catch-all) or a 404
+    // (static serving without one). Same cause, same fix.
+    addCheck('bad', 'The Node server is NOT running',
+      servedHtml
+        ? '/api/ping returned the app’s HTML instead of JSON — files are being served straight from dist/ ' +
+          'and nothing is handling /api.'
+        : '/api/ping returned ' + (ping.status || 'no response') + ' instead of JSON. ' + ping.text.slice(0, 160))
+
+    verdict('bad', 'Static files only — the server was never started', [
+      'This page proves the deployment publishes dist/ and the web server works.',
+      'But no Node process is answering /api, so there is no login and no database.',
+      'In the deployment settings: Build command "npm run build", Start command "npm start".',
+      'If the framework preset is Vite or Static, change it to Node.js / Express — anything that lets you set a start command.',
+      'Then check the runtime log for lines starting [kalope]. No such lines means the process was never started.',
+      'If your hosting plan cannot run Node apps at all, tell me — the PHP backend that runs on any Hostinger plan is still in git history.'
+    ])
+  })
+
+  function reportHealth(health) {
+    var b = health.body
+    if (!b) {
+      addCheck('bad', 'Health check returned something unreadable', health.text.slice(0, 200))
+      verdict('bad', 'The server answered but not with JSON', ['Send me the raw block below.'])
+      return
+    }
+
+    if (b.server) addCheck('ok', 'Database connected', 'Server version ' + b.server + '.')
+    if (b.schemaVersion) {
+      addCheck('ok', 'Tables ready', 'Schema version ' + b.schemaVersion +
+        (b.columnsAdded ? '. Added: ' + b.columnsAdded.join(', ') : '') + '.')
+    }
+    if (b.rows) {
+      addCheck(b.rows.users > 0 ? 'ok' : 'bad',
+        b.rows.users > 0 ? 'A login exists' : 'No login has been created',
+        'users ' + b.rows.users + ', projects ' + b.rows.projects +
+        ', receipts ' + b.rows.receipts + ', expenses ' + b.rows.expenses + '.')
+    }
+    if (b.uploads) {
+      addCheck(b.uploads.writable ? (b.uploads.insideAppFolder ? 'wait' : 'ok') : 'bad',
+        b.uploads.writable ? 'Uploads folder is writable' : 'Uploads folder is not writable',
+        b.uploads.insideAppFolder
+          ? 'WARNING: it is inside the app folder, so a deploy would delete every bill photo.'
+          : 'It is outside the app folder, so deploys will not destroy bill photos.')
+    }
+    (b.warnings || []).forEach(function (w) { addCheck('wait', 'Warning', w) })
+
+    if (b.ok) {
+      verdict('ok', 'Everything is working', [
+        'Open the app and sign in with the ADMIN_EMAIL and ADMIN_PASSWORD you set.',
+        'If you have not already, rotate any password you pasted into a chat or screenshot.'
+      ])
+      return
+    }
+
+    addCheck('bad', 'Failed at step: ' + (b.step || 'unknown'),
+      (b.code ? b.code + ' — ' : '') + (b.error || 'no detail'))
+
+    var steps = {
+      config: ['A required environment variable is blank or is not reaching the running app.',
+               'Check MYSQL_DATABASE, MYSQL_USER and MYSQL_PASSWORD, then redeploy — saving alone often is not enough.'],
+      connect: ['The app cannot reach the database.',
+                'If the code is ER_ACCESS_DENIED_ERROR the password is wrong, OR right but granted for a different host.',
+                'Run SHOW GRANTS FOR CURRENT_USER() in phpMyAdmin and set MYSQL_HOST to exactly the host after the @.',
+                'If the password contains symbols like @, replace it with letters and numbers only — panels mangle them.'],
+      schema: ['Connected, but creating the tables failed. The full error is in the runtime log.'],
+      query: ['Tables exist but a query failed. Send me the raw block below.'],
+      uploads: ['UPLOAD_DIR is missing or not writable. It must be outside the app folder, e.g. /home/<account>/kalope-uploads.']
+    }
+    verdict('bad', 'Failed at: ' + (b.step || 'unknown'), steps[b.step] || ['Send me the raw block below.'])
+  }
+
+  function verdict(state, title, points) {
+    verdictCard.className = 'card'
+    verdictEl.className = state
+    var html = '<h3></h3><ol></ol>'
+    verdictEl.innerHTML = html
+    verdictEl.querySelector('h3').textContent = title
+    var ol = verdictEl.querySelector('ol')
+    points.forEach(function (p) {
+      var li = document.createElement('li')
+      li.textContent = p
+      ol.appendChild(li)
+    })
+    rawEl.textContent = raw.join('\n')
+  }
+
+  rawEl.textContent = raw.join('\n')
+})()
+</script>
+</body>
+</html>
