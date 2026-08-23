@@ -1,0 +1,35 @@
+# Route every API request through index.php, and keep secrets unreadable.
+
+RewriteEngine On
+
+# /api/state  →  /api/index.php/state
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^(.*)$ index.php/$1 [QSA,L]
+
+# Some Apache setups drop the Authorization header before PHP sees it.
+RewriteCond %{HTTP:Authorization} .
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+# Nobody may fetch the credentials or read the source directly. Uploads live
+# outside this folder entirely and are served only through /files/{id}, which
+# checks the session first.
+<FilesMatch "\.(sql|md)$">
+  Require all denied
+</FilesMatch>
+
+<Files "config.php">
+  Require all denied
+</Files>
+
+<Files "config.example.php">
+  Require all denied
+</Files>
+
+<Files "schema.php">
+  Require all denied
+</Files>
+
+<Files "lib.php">
+  Require all denied
+</Files>

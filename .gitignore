@@ -1,0 +1,12 @@
+node_modules
+dist
+.vite
+*.local
+.DS_Store
+
+# Never commit real credentials or customer bills.
+.env
+api/config.php
+# Uploads belong outside the deployed folder (see config uploads_dir); this only
+# catches a local fallback.
+api/uploads/
