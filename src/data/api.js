@@ -1,11 +1,20 @@
 // HTTP client for the PHP API. The browser never sees the database — it talks
 // to this, and only this.
 
-const BASE = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '')
+/**
+ * Where the API lives.
+ *
+ * In a production build the server that serves this page also answers /api, so
+ * the default is same-origin and no environment variable is needed. In dev the
+ * default is local-only, so `npm run dev` on its own still works without a
+ * database — point VITE_API_URL at a running server to talk to one.
+ */
+const BASE = (import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? '' : '/api')).replace(/\/$/, '')
+
 const TOKEN_KEY = 'kalope.token'
 const USER_KEY = 'kalope.user'
 
-/** Cloud mode is on only when a VITE_API_URL was built in. */
+/** False means everything stays in this browser and there is no sign-in. */
 export const isCloud = () => BASE !== ''
 
 export const getToken = () => localStorage.getItem(TOKEN_KEY)

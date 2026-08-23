@@ -4,22 +4,27 @@ Track what a client pays in, what each job spends, and what's actually left.
 
 ```bash
 npm install
-npm run dev      # http://localhost:5173
-npm run build    # static bundle in dist/
+npm run dev        # app only, no database — http://localhost:5173
+npm run build      # bundle into dist/
+npm start          # app + API on one port — http://localhost:3000
+npm run test:e2e   # 32 API checks against a throwaway database
 ```
 
-## Two modes
+## One deployment, two halves
 
-**Cloud mode** — set `VITE_API_URL` in `.env` and the app signs in against the
-PHP API in [`api/`](api/), which stores everything in MySQL. This is the real
-deployment. See **[DEPLOY.md](DEPLOY.md)** for the Hostinger setup.
+`npm start` runs a Node server that serves the built React app **and** answers
+`/api` from the same origin. One thing to deploy, no CORS to configure. See
+**[DEPLOY.md](DEPLOY.md)** for the Hostinger setup.
 
-**Local-only mode** — no `.env`, no login, everything stays in that one browser.
-Useful for trying the app before the server exists. The sidebar says
-`This device only` so nobody mistakes it for the real thing.
+```
+Browser  ──HTTPS──▶  Node server (server/)  ──▶  MariaDB
+                     serves dist/ and /api
+```
 
-The app decides at build time based on whether `VITE_API_URL` is set. Every page
-works identically either way.
+**Local-only mode.** `npm run dev` on its own has no database and no login —
+everything stays in that browser. The sidebar says `This device only` so nobody
+mistakes it for the real thing. A production build always talks to `/api`; no
+frontend environment variable is needed.
 
 Settings has **Download backup** / **Restore from backup** in both modes, and
 the backup carries the attached files inside it.
@@ -54,18 +59,23 @@ that's the only file to audit.
 ## Architecture
 
 ```
-api/                PHP + MariaDB backend (upload to Hostinger public_html/api)
-  schema.php        the schema, and the only definition of it — self-migrating
-  index.php         the router: /health, /auth, /state, /sync, /files
-  lib.php           config, PDO handle, CORS, session check, uploads path
-  setup.php         one-time first-login creator
-  config.php        YOUR credentials — gitignored, never committed
+server/             Node + MariaDB backend, and the static host for dist/
+  index.js          express app: /api, dist/, SPA fallback
+  config.js         environment variables, validation, warnings
+  db.js             lazy mysql2 pool + driver-error hints
+  schema.js         the schema, and the only definition of it — self-migrating
+  auth.js           scrypt password hashing, sessions, requireUser
+  entities.js       the camelCase ↔ snake_case field maps
+  sync.js           applying the browser's queued operations
+  files.js          uploads: content sniffing, safe filenames
+  routes.js         /health /auth /state /sync /files
+  e2e.mjs           integration test against a throwaway database
 
 src/
   data/
     masters.js      seed heads + accounts (data, not code)
     repo.js         the local cache (localStorage)
-    api.js          HTTP client for the PHP API
+    api.js          HTTP client for the API
     outbox.js       the queue that guarantees nothing is lost
     files.js        attachments: server + IndexedDB cache + image downscaling
     seed.js         demo project set
@@ -108,9 +118,27 @@ batch is harmless. That's what makes retrying safe.
 | `POST /files` | Upload a bill photo |
 | `GET /files/{id}` | Fetch one, session-checked |
 
+## Every dependency must be pure JavaScript
+
+The host has no compiler, and the prebuilt binaries native packages download are
+linked against a newer glibc than CloudLinux has. Both paths fail, so a single
+native module makes `npm install` die on deploy — and the error points at the
+package, not at the platform.
+
+That rules out `bcrypt` and `argon2`; passwords use Node's built-in `scrypt`
+instead, which is a proper memory-hard KDF and adds nothing to the tree. The
+runtime dependencies are `express`, `mysql2` and `multer` — all pure JS.
+
+Before adding a package, check it:
+
+```bash
+node -e "const fs=require('fs'),p=require('path');for(const d of fs.readdirSync('node_modules'))\
+if(fs.existsSync(p.join('node_modules',d,'binding.gyp')))console.log('NATIVE:',d)"
+```
+
 ## Schema changes
 
-The schema lives only in [`api/schema.php`](api/schema.php). To add a field:
+The schema lives only in [`server/schema.js`](server/schema.js). To add a field:
 declare the column, bump `SCHEMA_VERSION`, re-upload. On the next request the
 app compares the live table against the declaration and adds what is missing.
 

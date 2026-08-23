@@ -3,12 +3,21 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=20.9.0"
+  },
   "scripts": {
     "dev": "vite",
+    "dev:server": "node --watch server/index.js",
     "build": "vite build",
+    "start": "node server/index.js",
+    "test:e2e": "node server/e2e.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
+    "express": "^5.2.1",
+    "multer": "^2.2.0",
+    "mysql2": "^3.23.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.26.2"

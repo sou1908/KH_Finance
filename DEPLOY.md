@@ -1,68 +1,74 @@
-# Putting Kalope Homes Finance on Hostinger
+# Deploying Kalope Homes Finance on Hostinger
 
-Follow these in order. Budget about 30 minutes the first time.
-
-## Why there's a PHP folder in a React project
-
-A React app runs **inside the browser**, on your phone or laptop. MySQL only
-speaks its own protocol over a database port — a browser cannot call it, and if
-it could, your database password would be sitting in plain JavaScript for anyone
-who opens Developer Tools.
-
-So there are three pieces:
+One repo, one deployment. The Node server serves the built React app **and**
+answers `/api` from the same origin, so there is no second thing to deploy and
+no CORS to configure.
 
 ```
-React app  ──HTTPS──▶  PHP API (api/)  ──▶  MySQL
-(browser)              (your Hostinger account)
+Browser  ──HTTPS──▶  Node server (server/)  ──▶  MariaDB
+                     serves dist/ and /api
 ```
-
-The PHP API is the only thing holding the database password. PHP because your
-Hostinger plan already runs it — nothing to install.
 
 ---
 
 ## 1. Create the database
 
-hPanel → **Databases → MySQL Databases**.
+hPanel → **Databases → Management**.
 
-- Create a database, e.g. `kalope`
-- Create a user and give it access to that database
-- Use a long generated password
+Create a *new* database rather than reusing one already listed — an existing one
+usually belongs to another site. Hostinger prefixes both names with your account
+id, so type the same suffix into both fields and you get something like
+`u123456789_kalope`.
 
-Hostinger prefixes both with your account id, so you'll end up with something
-like `u123456789_kalope`. **Write down the database name, username and
-password** — you need all three in step 3.
+**Save the password before clicking Create — it is not shown again.** Keep it
+letters and numbers only; symbols occasionally get mangled passing through
+hosting panels, and that is not a problem worth an afternoon.
 
-## 2. Upload the API
+## 2. Point the deployment at the repo
 
-hPanel → **File Manager** → open `public_html`. Upload the whole `api` folder so
-you end up with `public_html/api/`.
+You have this screen already. The settings that matter:
 
-**There is no SQL to run.** The app creates its own tables on the first
-successful connection, and on every boot it compares the live columns against
-what it expects and adds anything missing. That is deliberate: `CREATE TABLE IF
-NOT EXISTS` skips an existing table *including its columns*, so a field added
-later would never reach the live database and every query touching it would fail
-with `Unknown column`. Adding columns is automatic; nothing is ever dropped or
-retyped.
-
-Then, inside `public_html/api/`, copy `config.example.php` to **`config.php`**
-and fill in:
-
-| Setting | What to put |
+| Setting | Value |
 |---|---|
-| `db.host` | **`127.0.0.1`** — not `localhost`. See the trap below. |
-| `db.name`, `db.user` | The **full prefixed** names, e.g. `u123456789_kalope` |
-| `db.password` | From step 1 |
-| `uploads_dir` | A path **outside** `public_html`, e.g. `/home/u123456789/kalope-uploads` |
-| `allowed_origins` | Where the app is served from, exactly, including `https://` |
-| `app_secret` | Any long random string |
-| `setup_key` | Any long random string — you clear this in step 4 |
+| Framework preset | Must run a **Node server**, not a static export |
+| Branch | `main` |
+| Node version | **20.x or 22.x** (`package.json` requires >= 20.9.0) |
+| Root directory | `./` |
+| Build command | `npm run build` |
+| Start command | `npm start` |
+
+**Check the build settings actually run a Node server.** If the preset only does
+`npm run build` and serves a folder, the API will not exist and nobody can sign
+in. If anything mentions a *static export* or an `out/` directory, stop and
+change it — this app needs `npm start` to run afterwards.
+
+**Do not set a port.** The server reads `PORT` from the environment; a managed
+host assigns one, and hardcoding makes the app unreachable.
+
+## 3. Set the environment variables
+
+**All of them, before the first deploy.** With none set the app starts cleanly,
+creates no login, and nobody can get in.
+
+```
+MYSQL_HOST        127.0.0.1          ← not "localhost". See Trap 1.
+MYSQL_PORT        3306
+MYSQL_DATABASE    u123456789_kalope  ← the full prefixed name
+MYSQL_USER        u123456789_kalope
+MYSQL_PASSWORD    ············
+ADMIN_EMAIL       you@yourdomain.com
+ADMIN_PASSWORD    ············       ← this becomes your login
+UPLOAD_DIR        /home/u123456789/kalope-uploads
+```
+
+Substitute your real account id. Use a different `ADMIN_PASSWORD` from anything
+on your own machine — the same value in two places means one leak compromises
+both.
 
 ### Trap 1 — use `127.0.0.1`, never `localhost`
 
 MariaDB treats `user@localhost`, `user@127.0.0.1` and `user@::1` as **three
-separate accounts**, and your grant covers one of them. PHP opens a TCP
+separate accounts**, and your grant covers one of them. Node opens a TCP
 connection, and on current systems `localhost` resolves to IPv6 `::1` — matching
 no grant.
 
@@ -75,95 +81,91 @@ Settle it in seconds — phpMyAdmin → SQL:
 SHOW GRANTS FOR CURRENT_USER();
 ```
 
-Whatever follows the `@` is the only host that will work. Put exactly that in
-`db.host`. (`/api/health` also warns you if it sees `localhost`.)
+Whatever follows the `@` is the only host that will work. `/api/health` also
+warns you if it sees `localhost`.
 
-### Trap 2 — uploads must live outside the deployed folder
+### Trap 2 — `UPLOAD_DIR` must be outside the app folder
 
-Re-uploading the app replaces the `api` folder. Bill photos are gitignored —
-correctly, they hold customer material — so they are **not** restored by it. Left
-inside, every deploy silently destroys every bill photo you have, and nothing
-warns you.
+A deploy replaces your application directory. Bill photos are gitignored —
+correctly, they hold customer material — so they are **not** restored by it.
+Left inside, every deploy silently destroys every photo, and nothing warns you.
 
-Point `uploads_dir` at a sibling directory like `/home/u123456789/kalope-uploads`.
-Substitute your real account id; a literal `uXXXXXXXX` fails only later, the
-first time somebody uploads something. `/api/health` reports
+Point it at a sibling directory like `/home/u123456789/kalope-uploads`. The
+server creates it on first use. A literal `u123456789` left in the value fails
+only later, the first time somebody uploads something — `/api/health` reports
 `uploads.insideAppFolder` so you can confirm.
 
-### Check it works
+## 4. Deploy, then verify before opening the site
 
-Visit `https://yourdomain.com/api/health`:
+The tables are created on the first successful connection, so the first request
+is also the migration.
+
+Open `https://your-site/api/health`:
 
 ```json
 {"service":"kalope-finance-api","server":"11.8.8-MariaDB","schemaVersion":3,
- "migrated":true,"rows":{"users":0,"projects":0,"receipts":0,"expenses":0},
- "uploads":{"exists":true,"writable":true,"insideAppFolder":false},
- "nextStep":"No login exists yet…","ok":true}
+ "migrated":true,"rows":{"users":1,"projects":0,"receipts":0,"expenses":0},
+ "uploads":{"exists":true,"writable":true,"insideAppFolder":false},"ok":true}
 ```
 
-A version string and `ok: true` means the connection, the schema and the uploads
-folder are all good. Anything else names the failing step — take it to the table
-further down. It stays open deliberately: it exists for the case where nobody
-can log in, so putting it behind a session would defeat it. It reports codes and
-counts only — never a host, user, database name or password.
+A version string, `users: 1` and `ok: true` means the schema was created, your
+login exists and the app is wired up. Anything else names the failing step —
+take it to the table below.
 
-## 3. Create your login
+Then open the site and sign in with `ADMIN_EMAIL` / `ADMIN_PASSWORD`.
 
-Visit `https://yourdomain.com/api/setup.php?key=YOUR_SETUP_KEY`.
+---
 
-Enter the email and password you want to sign in with. Use a real password —
-this is the key to your whole financial record.
+## When it fails
 
-**Then go back into `config.php` and set `'setup_key' => null`.** Until you do,
-anyone who guesses that key can create a login. The page refuses to load once
-it's null.
+`/api/health` names the step. It stays open deliberately — it exists for the
+case where nobody can log in, so putting it behind a session would defeat it. It
+reports codes and counts only: never a host, user, database name or password.
 
-## 4. Build and upload the app
+| What health says | What it means | What to change |
+|---|---|---|
+| `step: "config"` | Variables not set, or not visible to the running app | Add them, save, redeploy |
+| `ER_ACCESS_DENIED_ERROR` | Wrong password — **or the right one from the wrong host** | Run `SHOW GRANTS` first. Trap 1 |
+| `ER_BAD_DB_ERROR` | Database does not exist | Create it in the panel |
+| `ER_DBACCESS_DENIED_ERROR` | User exists but has no rights on it | Grant full privileges |
+| `ECONNREFUSED` | Nothing listening at that host and port | Check `MYSQL_HOST` |
+| `step: "schema"` | Connected, but table creation failed | Read the server log; usually a dialect issue |
+| `uploads.writable: false` | Folder missing or read-only | Check `UPLOAD_DIR`, permissions `755` |
+| `uploads.insideAppFolder: true` | Photos will die on the next deploy | Move `UPLOAD_DIR` outside the app |
+| `rows.users: 0` | No login was created | Set `ADMIN_EMAIL` and `ADMIN_PASSWORD`, redeploy |
 
-On your computer, in the project folder:
+**Sign-in page loads but says "Could not reach the server".** The deployment is
+serving `dist/` statically without running `npm start`. Fix the build settings.
 
-```bash
-cp .env.example .env
-```
-
-Edit `.env` so it points at your API:
-
-```
-VITE_API_URL=https://yourdomain.com/api
-```
-
-Then:
-
-```bash
-npm install
-npm run build
-```
-
-Upload **the contents of `dist/`** to wherever the app should live —
-`public_html/` for the domain root, or `public_html/finance/` for a subfolder.
-
-Open the site. You should get the sign-in screen.
+**Uploads fail on large photos.** The app already shrinks photos before sending,
+so this is rare. Raise `MAX_UPLOAD_BYTES` if you need to.
 
 ---
 
 ## How your data is protected
 
 **Nothing is lost if the connection drops.** Every change is written to a queue
-in the browser *before* the screen updates, and only leaves the queue once MySQL
-has confirmed it. Close the laptop mid-entry, lose signal on site, kill the
-browser — the queue is still there next time and sends itself. The sidebar shows
-`Saved`, `Waiting to save · 3`, or `Reconnect` so you always know where you
-stand, and closing the tab with unsent work warns you first.
+in the browser *before* the screen updates, and only leaves the queue once the
+database has confirmed it. Close the laptop mid-entry, lose signal on site, kill
+the browser — the queue is still there next time and sends itself. The sidebar
+shows `Saved`, `Waiting to save · 3`, or `Reconnect`, and closing the tab with
+unsent work warns you first.
 
-**Nothing is truly deleted.** Deleting hides a row by setting `deleted_at`; the
-data stays in MySQL. A mis-click is recoverable with one SQL statement.
+**A half-saved batch is impossible.** Each batch is applied inside one
+transaction; if any operation fails, the whole batch rolls back.
 
-**Every write is logged.** The `audit_log` table records who changed what and
-when, forever. If a number is ever disputed, that table is the tape.
+**Re-sending is harmless.** Writes are upserts keyed by an id the browser
+generated, which is what makes retrying safe.
 
-**Bills are private.** Uploaded photos are stored outside the web root's reach
-and served only through `/files/{id}`, which checks your session first. A direct
-URL to the uploads folder returns nothing.
+**Nothing is truly deleted.** Deleting sets `deleted_at`; the row stays. A
+mis-click is recoverable with one SQL statement.
+
+**Every write is logged.** `audit_log` records who changed what and when,
+forever. If a number is ever disputed, that table is the tape.
+
+**Bills are private.** Photos live outside the web root and are served only
+through `/files/{id}`, which checks your session first. The file's real content
+decides its type — a script renamed `.png` is rejected.
 
 **Money is DECIMAL, never FLOAT.** Floats round wrong, and a ledger that rounds
 wrong is worthless.
@@ -171,82 +173,62 @@ wrong is worthless.
 ## Adding a field later
 
 Nothing manual. Add the column to `SCHEMA` in
-[`api/schema.php`](api/schema.php), bump `SCHEMA_VERSION`, and re-upload. The
-next request compares the live table against the declaration and issues the
-`ALTER TABLE … ADD COLUMN` itself. Columns are only ever added.
+[`server/schema.js`](server/schema.js), bump `SCHEMA_VERSION`, redeploy. On the
+next request the app compares the live table against the declaration and issues
+the `ALTER TABLE … ADD COLUMN` itself. Columns are only ever added — never
+dropped, never retyped.
+
+This exists because `CREATE TABLE IF NOT EXISTS` skips an existing table
+*including its columns*, so a field added later would never reach the live
+database: the deploy succeeds and every query touching it fails with
+`Unknown column`.
 
 `/api/health` reports what it did — `"columnsAdded": ["projects.phone"]`.
 
 ## Two things that look like tests but are not
 
 **phpMyAdmin does not test your password.** Hostinger signs you in from your
-panel session, so opening it proves nothing about the credentials the API is
-using. Use `/api/health` — that is the only thing exercising the real path.
+panel session, so opening it proves nothing about the credentials the app is
+using. `/api/health` is the only thing exercising the real path.
 
 **The site loading is not proof the data survives.** Before real data exists,
-create one project, re-upload the app, and check it is still there. Two minutes,
-and it answers the only question that really matters.
+create one project, redeploy, and check it is still there. Two minutes, and it
+answers the only question that really matters.
 
 ## Backups
 
-Hostinger takes its own backups, but take your own too:
+Hostinger backs up managed databases; it does **not** back up your uploads
+directory.
 
-- **In the app:** Settings → Download backup. One JSON file with the ledger and
+- **In the app:** Settings → Download backup — one JSON file with the ledger and
   every attached photo inside it.
 - **In phpMyAdmin:** Export → the whole database.
+- **Your `UPLOAD_DIR`:** copy it somewhere yourself.
 
-Do this before anything risky.
+## Running locally
 
-## Running without the server
+```bash
+npm install
+npm run dev          # app only, no database, data stays in the browser
+```
 
-Delete `.env` (or leave `VITE_API_URL` blank) and the app runs entirely in the
-browser with no login — useful for trying things out. Data then lives on that
-one device only, and the sidebar says `This device only` so nobody mistakes it
-for the real thing.
+To run the whole stack against a local MySQL:
 
-## When it fails
+```bash
+cp .env.example .env    # fill in your local database
+npm run build
+npm start               # http://localhost:3000 — app and API together
+```
 
-`/api/health` names the step. Find it here.
+`npm run dev` proxies `/api` to `http://127.0.0.1:3000`, so running both gives
+you hot reload against a real database.
 
-| What health says | What it means | What to change |
-|---|---|---|
-| `step: "config"` | A setting is blank in `config.php` | Fill it in and re-upload |
-| `step: "connect"`, `1045` | Wrong password — **or the right one from the wrong host** | Run `SHOW GRANTS FOR CURRENT_USER()`. Trap 1 |
-| `step: "connect"`, `1049` | That database does not exist | Create it in hPanel |
-| `step: "connect"`, `1044` | User exists but has no rights on it | Grant full privileges |
-| `step: "connect"`, refused | Nothing listening there | Check `db.host` and `db.port` |
-| `step: "schema"` | Connected, but table creation failed | Usually a dialect issue; the full error is in your PHP error log |
-| `uploads.writable: false` | The folder is missing or read-only | Create it, set permissions to `755` |
-| `uploads.insideAppFolder: true` | Bill photos will die on the next deploy | Move `uploads_dir` outside `public_html` |
+## Testing the API
 
-**"Could not reach the server" on the sign-in screen.**
-Open `https://yourdomain.com/api/health` directly. If that fails, the API isn't
-uploaded correctly. If it works, your site's address isn't in `allowed_origins`
-in `config.php` — it must match exactly, including `https://`.
+```bash
+npm run test:e2e
+```
 
-**Sign-in works but the ledger is empty and won't save.**
-Almost always a stripped `Authorization` header. The included `api/.htaccess`
-handles this; make sure it uploaded (File Manager hides dotfiles by default —
-turn on "show hidden files").
-
-**Uploads fail on large photos.**
-Raise `upload_max_filesize` and `post_max_size` in hPanel → Advanced → PHP
-Configuration. The app already shrinks photos before sending, so this is rare.
-
-**Everything is slow after a few thousand entries.**
-The indexes in `api/schema.php` cover the queries the app makes today. Beyond
-that, the next step is paginating `/state` instead of loading the whole ledger.
-
----
-
-## What has and hasn't been tested
-
-**Tested by actually running it:** the PHP parses and runs, routing works,
-`/health` reports the right step and status code, the auth guard returns 401,
-unknown routes return 404, and the generated SQL carries no dialect that an
-older MariaDB would reject. The React app is browser-tested down to 390px.
-
-**Not tested:** the actual MySQL operations — reads, writes, the migration —
-because there is no MySQL on the machine this was built on. `/api/health` is the
-first thing that exercises them, which is exactly what it is for. Send me what
-it returns and I'll fix whatever it names.
+32 checks against a **throwaway** database — schema creation, login, the sync
+queue, DECIMAL precision, transaction rollback, upload type-sniffing, soft
+delete and auth. It writes and deletes, so never point it at real data.
