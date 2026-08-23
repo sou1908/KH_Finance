@@ -3,6 +3,8 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
+  "description": "Project finance for Kalope Homes — a React app and its Node API served from one origin.",
+  "main": "server/index.js",
   "engines": {
     "node": ">=20.9.0"
   },
@@ -10,6 +12,7 @@
     "dev": "vite",
     "dev:server": "node --watch server/index.js",
     "build": "vite build",
+    "prestart": "node server/prestart.mjs",
     "start": "node server/index.js",
     "test:e2e": "node server/e2e.mjs",
     "preview": "vite preview"

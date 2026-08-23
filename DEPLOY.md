@@ -134,8 +134,39 @@ reports codes and counts only: never a host, user, database name or password.
 | `uploads.insideAppFolder: true` | Photos will die on the next deploy | Move `UPLOAD_DIR` outside the app |
 | `rows.users: 0` | No login was created | Set `ADMIN_EMAIL` and `ADMIN_PASSWORD`, redeploy |
 
-**Sign-in page loads but says "Could not reach the server".** The deployment is
-serving `dist/` statically without running `npm start`. Fix the build settings.
+### The build succeeds but the deployment fails
+
+This is the most likely problem, and it is a **settings** problem, not a code
+one: the deployment is treating this as a frontend-only project. A static
+preset builds `dist/` and publishes it — the Express server never runs, so
+there is no `/api`, and nobody can sign in.
+
+The tell: `https://your-site/` loads the sign-in page, but
+`https://your-site/api/health` returns your site's HTML instead of JSON, or a
+404.
+
+**The fix is on the deployment screen, not in the repo.** The deployment must
+run a Node server:
+
+- **Build command:** `npm run build`
+- **Start command:** `npm start`
+
+If the framework preset is **Vite**, change it. Look for **Node.js**,
+**Express**, or a **Custom / Other** preset that lets you set a start command.
+Anything offering only a *static export* or an `out/`/`dist/` publish directory
+cannot run this app — server-rendered routes and an API cannot work that way.
+
+Two things in the repo help a platform detect this correctly, and are already
+committed: `"main": "server/index.js"` in `package.json`, and a `Procfile`
+containing `web: npm start`.
+
+As a safety net, `npm start` builds the frontend itself if `dist/` is missing,
+so a platform that skips the build step still comes up.
+
+**Verified from a clean clone of this repo:** `npm install` → `npm run build` →
+`npm start` serves the app on `/`, SPA routes like `/projects`, hashed assets
+with immutable caching, and `/api/health`. If your platform runs those three
+commands, it works.
 
 **Uploads fail on large photos.** The app already shrinks photos before sending,
 so this is rare. Raise `MAX_UPLOAD_BYTES` if you need to.
