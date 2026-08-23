@@ -1,3 +1,7 @@
+// Printed before anything is imported, so even a crash while loading a module
+// leaves a line in the runtime log proving the process started at all.
+console.log('[kalope] boot: server.js, node ' + process.version + ', PORT=' + (process.env.PORT ?? '(not set)'))
+
 /**
  * Root entry point.
  *
@@ -6,30 +10,24 @@
  * root, and a missing entry file fails the deploy after a build that looked
  * perfectly successful.
  *
- * Starting the app any of these ways does the same thing:
- *
- *   npm start            → prestart builds if needed, then server/index.js
- *   node server.js       → this file
- *   node server/index.js → the server directly
- *
- * The first two also build the frontend when dist/ is missing, so a platform
- * that skips the build step still comes up.
+ * Order matters here. The port is bound FIRST and anything slow happens after.
+ * A managed host waits only a few seconds for the process to start listening;
+ * if a build ran first and took thirty seconds, the proxy would give up and
+ * serve its own 503 — from an application that was working perfectly.
  */
-
-console.log('[kalope] starting from server.js')
-
-try {
-  const { ensureBuilt } = await import('./server/prestart.mjs')
-  ensureBuilt()
-} catch (err) {
-  // A failed build must never stop the server: it is better to come up and
-  // report the problem than to leave the host showing an unexplained 503.
-  console.warn('[kalope] skipping the build step:', err.message)
-}
 
 try {
   await import('./server/index.js')
 } catch (err) {
   console.error('[kalope] THE SERVER FAILED TO START:', err)
   process.exit(1)
+}
+
+// Now that the port is answering, build the frontend if the deploy did not.
+// Until it finishes, /api works and page requests explain themselves.
+try {
+  const { ensureBuiltAsync } = await import('./server/prestart.mjs')
+  ensureBuiltAsync()
+} catch (err) {
+  console.warn('[kalope] skipping the build step:', err.message)
 }

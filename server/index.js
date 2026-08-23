@@ -40,34 +40,39 @@ app.use((req, res, next) => {
 
 app.use('/api', api)
 
-if (fs.existsSync(distDir)) {
+// Mounted unconditionally, and dist/ is checked per request rather than once at
+// import. If the frontend is built after the server starts, it starts working
+// on its own — no restart, and no need to decide at boot whether it exists.
+const indexHtml = path.join(distDir, 'index.html')
+
+app.use(
   // Hashed asset filenames can be cached hard; index.html must never be, or a
   // deploy leaves people on the old bundle.
-  app.use(
-    express.static(distDir, {
-      index: false,
-      setHeaders: (res, filePath) => {
-        if (filePath.endsWith('.html')) res.set('Cache-Control', 'no-cache')
-        else if (filePath.includes(`${path.sep}assets${path.sep}`)) {
-          res.set('Cache-Control', 'public, max-age=31536000, immutable')
-        }
-      },
-    }),
-  )
+  express.static(distDir, {
+    index: false,
+    fallthrough: true,
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith('.html')) res.set('Cache-Control', 'no-cache')
+      else if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+        res.set('Cache-Control', 'public, max-age=31536000, immutable')
+      }
+    },
+  }),
+)
 
-  // Single-page app: any path that is not a file and not /api is the app itself.
-  app.get(/^\/(?!api\/).*/, (req, res) => {
-    res.set('Cache-Control', 'no-cache')
-    res.sendFile(path.join(distDir, 'index.html'))
-  })
-} else {
-  app.get('/', (req, res) =>
-    res
+// Single-page app: any path that is not a file and not /api is the app itself.
+app.get(/^\/(?!api\/).*/, (req, res) => {
+  res.set('Cache-Control', 'no-cache')
+
+  if (!fs.existsSync(indexHtml)) {
+    return res
       .status(503)
       .type('text/plain')
-      .send('The app has not been built yet. Run "npm run build", then start the server again.'),
-  )
-}
+      .send('The frontend has not been built yet. The API is running — try /api/ping.')
+  }
+
+  res.sendFile(indexHtml)
+})
 
 /**
  * A managed host shows a 503 when it cannot reach the process, and its runtime
