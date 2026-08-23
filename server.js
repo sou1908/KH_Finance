@@ -16,8 +16,20 @@
  * that skips the build step still comes up.
  */
 
-import { ensureBuilt } from './server/prestart.mjs'
+console.log('[kalope] starting from server.js')
 
-ensureBuilt()
+try {
+  const { ensureBuilt } = await import('./server/prestart.mjs')
+  ensureBuilt()
+} catch (err) {
+  // A failed build must never stop the server: it is better to come up and
+  // report the problem than to leave the host showing an unexplained 503.
+  console.warn('[kalope] skipping the build step:', err.message)
+}
 
-await import('./server/index.js')
+try {
+  await import('./server/index.js')
+} catch (err) {
+  console.error('[kalope] THE SERVER FAILED TO START:', err)
+  process.exit(1)
+}

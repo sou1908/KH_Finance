@@ -22,12 +22,27 @@ export function ensureBuilt() {
 
   console.log('[kalope] dist/ is missing — building the frontend before starting.')
 
-  const result = spawnSync('npm', ['run', 'build'], {
-    cwd: projectRoot,
-    stdio: 'inherit',
-    // npm is a shell script on Windows; without this, spawn cannot find it.
-    shell: process.platform === 'win32',
-  })
+  let result
+  try {
+    result = spawnSync('npm', ['run', 'build'], {
+      cwd: projectRoot,
+      stdio: 'inherit',
+      // npm is a shell script on Windows; without this, spawn cannot find it.
+      shell: process.platform === 'win32',
+      // A host that kills a slow start would show a 503 with no explanation.
+      // Better to give up on the build and let the server come up and say so.
+      timeout: 180_000,
+    })
+  } catch (err) {
+    console.warn('[kalope] could not run the build:', err.message)
+    return false
+  }
+
+  if (result.error) {
+    console.warn('[kalope] could not run the build:', result.error.message)
+    console.warn('[kalope] set the deploy build command to "npm run build".')
+    return false
+  }
 
   if (result.status !== 0) {
     console.warn('[kalope] the build did not succeed. The API will still start; the page will say so.')

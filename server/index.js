@@ -69,10 +69,35 @@ if (fs.existsSync(distDir)) {
   )
 }
 
+/**
+ * A managed host shows a 503 when it cannot reach the process, and its runtime
+ * log is often the only clue. So: never die silently, and say enough at boot to
+ * diagnose the usual causes from the log alone.
+ */
+process.on('uncaughtException', (err) => {
+  console.error('[kalope] UNCAUGHT EXCEPTION — staying up:', err)
+})
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[kalope] UNHANDLED REJECTION — staying up:', reason)
+})
+
 // Bind to every interface: a managed host routes to the container's address,
 // not to loopback.
-app.listen(config.port, '0.0.0.0', () => {
-  console.log(`[kalope] listening on ${config.port}`)
+const server = app.listen(config.port, '0.0.0.0', () => {
+  console.log(`[kalope] listening on 0.0.0.0:${config.port}`)
+  console.log(
+    process.env.PORT
+      ? `[kalope] port came from the PORT variable (${process.env.PORT})`
+      : '[kalope] PORT was not set, so 3000 was assumed. If the host expects another port, ' +
+          'this is why the site returns 503 — do not hardcode it, let the host set PORT.',
+  )
+  console.log(`[kalope] node ${process.version}, cwd ${process.cwd()}`)
+  console.log(
+    fs.existsSync(distDir)
+      ? `[kalope] serving the app from ${distDir}`
+      : `[kalope] NO FRONTEND at ${distDir} — the build did not run. Only /api works.`,
+  )
 
   // Say what is wrong at boot rather than waiting for someone to hit a 500.
   const missing = missingConfig()
@@ -81,4 +106,15 @@ app.listen(config.port, '0.0.0.0', () => {
     console.warn('[kalope] the app will start, but nobody can sign in. Check /api/health.')
   }
   for (const warning of configWarnings()) console.warn(`[kalope] ${warning}`)
+})
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`[kalope] port ${config.port} is already in use — another copy is probably still running.`)
+  } else if (err.code === 'EACCES') {
+    console.error(`[kalope] not allowed to bind port ${config.port}. Let the host set PORT instead.`)
+  } else {
+    console.error('[kalope] could not start listening:', err)
+  }
+  process.exit(1)
 })

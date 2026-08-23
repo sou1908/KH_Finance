@@ -19,6 +19,15 @@ const upload = multer({
 
 const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next)
 
+/**
+ * The simplest possible liveness check: touches no database, no disk, nothing
+ * that can hang. If this answers, the process is up and the host can reach it —
+ * which separates "my app is broken" from "the platform never started it".
+ */
+api.get('/ping', (req, res) => {
+  res.json({ pong: true, node: process.version, port: config.port, uptimeSeconds: Math.round(process.uptime()) })
+})
+
 /* ------------------------------------------------------------------ health */
 
 /**
