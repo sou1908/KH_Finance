@@ -60,30 +60,102 @@ export function categoryBreakdown(state, projectId) {
 }
 
 /**
- * Per-account movement. This is what reconciles the sketch's three inflow
- * channels against real spending — cash in hand, each partner's personal
- * account, and the company account are all tracked separately.
+ * Per-account movement. This is what reconciles the three inflow channels
+ * against real spending — cash in hand, each partner's personal account, and
+ * the company account are all tracked separately.
+ *
+ * Transfers count here and ONLY here. Moving money between your own accounts
+ * changes what is in each pocket; it is not income and it is not spending, so
+ * it must never reach projectTotals.
  */
 export function accountLedger(state, projectId) {
   const receipts = byProject(state.receipts, projectId)
   const expenses = byProject(state.expenses, projectId)
+  const transfers = byProject(state.transfers ?? [], projectId)
 
   return state.accounts.map((acc) => {
     const inRows = receipts.filter((r) => r.accountId === acc.id)
     const outRows = expenses.filter((e) => e.accountId === acc.id)
+    const movedIn = transfers.filter((t) => t.toAccountId === acc.id)
+    const movedOut = transfers.filter((t) => t.fromAccountId === acc.id)
+
     const inflow = sum(inRows)
     const outflow = sum(outRows)
+    const transferIn = sum(movedIn)
+    const transferOut = sum(movedOut)
+
+    // An opening balance is a position, not a project's money, so it only
+    // applies when looking at everything.
     const opening = projectId === 'all' ? Number(acc.openingBalance) || 0 : 0
 
     return {
       ...acc,
       inflow,
       outflow,
-      balance: opening + inflow - outflow,
+      transferIn,
+      transferOut,
       opening,
-      movements: inRows.length + outRows.length,
+      balance: opening + inflow + transferIn - outflow - transferOut,
+      movements: inRows.length + outRows.length + movedIn.length + movedOut.length,
     }
   })
+}
+
+/**
+ * Money the firm is genuinely out of pocket for: the accounts sitting below
+ * zero. Before transfers existed this was measured as "spent more than it
+ * received", which counted every rupee a partner spent even when the company
+ * had funded it the day before.
+ */
+export function ownMoneyAtRisk(rows, kind = 'personal') {
+  return rows
+    .filter((a) => (kind ? a.kind === kind : true))
+    .reduce((total, a) => total + Math.max(-a.balance, 0), 0)
+}
+
+/**
+ * Transfers earmarked for a project.
+ *
+ * The link records why the money moved — "advanced to A for the Kothari job" —
+ * so an advance can be chased at close. It is intent, not income: none of this
+ * touches what the project has earned or spent.
+ */
+export function projectAdvances(state, projectId) {
+  const accountName = Object.fromEntries(state.accounts.map((a) => [a.id, a.name]))
+  const accountKind = Object.fromEntries(state.accounts.map((a) => [a.id, a.kind]))
+
+  const rows = byProject(state.transfers ?? [], projectId)
+    .map((t) => ({
+      ...t,
+      amount: Number(t.amount) || 0,
+      fromName: accountName[t.fromAccountId] ?? 'Unknown account',
+      toName: accountName[t.toAccountId] ?? 'Unknown account',
+      // Company money going out to a person is an advance; the reverse is a
+      // return of one.
+      isReturn: accountKind[t.toAccountId] === 'company' && accountKind[t.fromAccountId] !== 'company',
+    }))
+    .sort((a, b) => (a.date === b.date ? 0 : b.date.localeCompare(a.date)))
+
+  const advanced = sum(rows.filter((r) => !r.isReturn))
+  const returned = sum(rows.filter((r) => r.isReturn))
+
+  return { rows, advanced, returned, net: advanced - returned }
+}
+
+/** Every transfer, newest first, with names resolved. For the Accounts page. */
+export function transferLedger(state, projectId) {
+  const accountName = Object.fromEntries(state.accounts.map((a) => [a.id, a.name]))
+  const projectName = Object.fromEntries(state.projects.map((p) => [p.id, p.name]))
+
+  return byProject(state.transfers ?? [], projectId)
+    .map((t) => ({
+      ...t,
+      amount: Number(t.amount) || 0,
+      fromName: accountName[t.fromAccountId] ?? 'Unknown account',
+      toName: accountName[t.toAccountId] ?? 'Unknown account',
+      projectName: t.projectId ? (projectName[t.projectId] ?? 'Unknown project') : '',
+    }))
+    .sort((a, b) => (a.date === b.date ? 0 : b.date.localeCompare(a.date)))
 }
 
 /**

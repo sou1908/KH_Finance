@@ -11,7 +11,10 @@ export async function loadState(conn) {
   const state = {}
 
   for (const [entity, fields] of Object.entries(ENTITIES)) {
-    const order = entity === 'receipts' || entity === 'expenses' ? '`date` DESC, id DESC' : 'name ASC'
+    // Dated rows sort by date; masters sort by name. Getting this wrong is not
+    // a cosmetic problem — ordering by a column the table does not have throws.
+    const dated = entity === 'receipts' || entity === 'expenses' || entity === 'transfers'
+    const order = dated ? '`date` DESC, id DESC' : 'name ASC'
     const [rows] = await conn.query(`SELECT * FROM \`${entity}\` WHERE deleted_at IS NULL ORDER BY ${order}`)
     state[entity] = rows.map((row) => rowToJson(row, fields))
   }
@@ -137,6 +140,7 @@ async function softDelete(conn, entity, id, userId) {
 
 async function removeProject(conn, id, userId) {
   if (!id) throw new Error('Cannot delete a project without an id')
+
   for (const [table, column] of [
     ['projects', 'id'],
     ['receipts', 'project_id'],
@@ -144,6 +148,11 @@ async function removeProject(conn, id, userId) {
   ]) {
     await conn.execute(`UPDATE \`${table}\` SET deleted_at = NOW() WHERE \`${column}\` = ?`, [id])
   }
+
+  // Transfers survive. The money really did move between accounts, so deleting
+  // the record would leave every balance wrong; only the earmark is cleared.
+  await conn.execute("UPDATE transfers SET project_id = NULL WHERE project_id = ?", [id])
+
   await audit(conn, userId, 'removeProject', 'projects', id, null)
 }
 

@@ -24,7 +24,7 @@ import { newId } from './ids.js'
  *     rounds wrong is worthless.
  */
 
-export const SCHEMA_VERSION = 3
+export const SCHEMA_VERSION = 4
 
 export const SCHEMA = {
   app_meta: {
@@ -162,6 +162,38 @@ export const SCHEMA = {
       'KEY idx_expenses_category (category_id)',
       'KEY idx_expenses_account (account_id)',
       'KEY idx_expenses_live (deleted_at)',
+    ],
+  },
+
+  /**
+   * Money moved between our own accounts.
+   *
+   * Deliberately its own table rather than a flag on receipts or expenses: a
+   * transfer must never be able to leak into a project's income or spending,
+   * and separate tables make that structural instead of something a query has
+   * to remember to exclude. project_id is an earmark — why the money moved —
+   * never a claim that the project earned it.
+   */
+  transfers: {
+    columns: {
+      id: 'VARCHAR(40) NOT NULL',
+      date: 'DATE NULL',
+      amount: 'DECIMAL(14,2) NOT NULL DEFAULT 0',
+      from_account_id: 'VARCHAR(40) NULL',
+      to_account_id: 'VARCHAR(40) NULL',
+      project_id: 'VARCHAR(40) NULL',
+      mode: "VARCHAR(40) NOT NULL DEFAULT ''",
+      reference: "VARCHAR(190) NOT NULL DEFAULT ''",
+      note: 'TEXT NULL',
+      updated_at: 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP',
+      deleted_at: 'DATETIME NULL',
+    },
+    primary: '(id)',
+    keys: [
+      'KEY idx_transfers_from (from_account_id, date)',
+      'KEY idx_transfers_to (to_account_id, date)',
+      'KEY idx_transfers_project (project_id)',
+      'KEY idx_transfers_live (deleted_at)',
     ],
   },
 

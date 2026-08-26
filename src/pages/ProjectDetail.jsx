@@ -8,6 +8,7 @@ import ProjectDialog from '../components/ProjectDialog'
 import ReceiptDialog from '../components/ReceiptDialog'
 import ExpenseDialog from '../components/ExpenseDialog'
 import CompleteProjectDialog from '../components/CompleteProjectDialog'
+import TransferDialog from '../components/TransferDialog'
 import ContactLinks from '../components/ContactLinks'
 import { AttachmentGallery } from '../components/Attachments'
 import { projectContact } from '../lib/phone'
@@ -18,6 +19,7 @@ import {
   combinedLedger,
   inventoryLeft,
   monthlyFlow,
+  projectAdvances,
   projectTotals,
 } from '../store/selectors'
 import { downloadCSV, money, moneyShort, num, pct, shortDate, toCSV } from '../lib/format'
@@ -46,6 +48,7 @@ export default function ProjectDetail() {
   const heads = categoryBreakdown(state, id).filter((h) => h.amount > 0)
   const accounts = accountLedger(state, id).filter((a) => a.movements > 0)
   const stock = inventoryLeft(state, id)
+  const advances = projectAdvances(state, id)
   const ledger = combinedLedger(state, id)
   const short = totals.remaining < 0
 
@@ -280,6 +283,66 @@ export default function ProjectDetail() {
           </div>
         </div>
 
+        {advances.rows.length > 0 && (
+          <Panel
+            title="Money advanced for this job"
+            action={
+              <button className="btn tiny" onClick={() => setDialog({ kind: 'transfer' })}>
+                Move money
+              </button>
+            }
+            flush
+          >
+            <div style={{ padding: '14px 18px 0' }}>
+              <p className="note" style={{ marginTop: 0 }}>
+                Your own money moved between accounts so the buying could happen. Deliberately{' '}
+                <strong>not counted</strong> in incoming or expenditure — the client did not pay it.
+                {advances.net > 0 && ` ${money(advances.net)} is currently out with someone for this job.`}
+              </p>
+            </div>
+            <div className="table-wrap">
+              <table className="data">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>From → To</th>
+                    <th className="col-optional">Note</th>
+                    <th className="right">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {advances.rows.map((t) => (
+                    <tr key={t.id}>
+                      <td className="num" style={{ whiteSpace: 'nowrap' }}>
+                        {shortDate(t.date)}
+                      </td>
+                      <td>
+                        {t.fromName} <span className="note">→</span>{' '}
+                        <strong style={{ fontWeight: 500 }}>{t.toName}</strong>
+                      </td>
+                      <td className="note col-optional">{t.note || t.reference || '—'}</td>
+                      <td className={`amount ${t.isReturn ? 'pos' : ''}`}>
+                        {t.isReturn ? 'returned ' : ''}
+                        {money(t.amount)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <th colSpan="3" style={{ textAlign: 'right' }}>
+                      Still out with someone
+                    </th>
+                    <th className="amount" style={{ fontSize: 13 }}>
+                      {money(advances.net)}
+                    </th>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </Panel>
+        )}
+
         {accounts.length > 0 && (
           <Panel title="Which account paid" flush>
             <div className="table-wrap">
@@ -419,6 +482,7 @@ export default function ProjectDetail() {
         <ExpenseDialog existing={dialog.row} lockedProject={id} onClose={() => setDialog(null)} />
       )}
       {dialog?.kind === 'project' && <ProjectDialog existing={dialog.row} onClose={() => setDialog(null)} />}
+      {dialog?.kind === 'transfer' && <TransferDialog lockedProject={id} onClose={() => setDialog(null)} />}
       {dialog?.kind === 'complete' && (
         <CompleteProjectDialog project={project} onClose={() => setDialog(null)} />
       )}

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import ReceiptDialog from './ReceiptDialog'
 import ExpenseDialog from './ExpenseDialog'
 import ProjectDialog from './ProjectDialog'
+import TransferDialog from './TransferDialog'
 import { useApp } from '../store/AppStore'
 import { useScope } from '../store/ScopeContext'
 
@@ -10,8 +11,8 @@ import { useScope } from '../store/ScopeContext'
  * lived only on its own page, which made the read-only dashboard look like a
  * mockup — there was nothing to click on the first screen anyone sees.
  */
-export default function QuickAdd({ compact }) {
-  const { projects } = useApp()
+export default function QuickAdd() {
+  const { projects, accounts } = useApp()
   const { scope } = useScope()
   const [open, setOpen] = useState(null)
 
@@ -37,13 +38,22 @@ export default function QuickAdd({ compact }) {
         >
           Record expense
         </button>
+        <button
+          className="btn"
+          onClick={() => setOpen('transfer')}
+          disabled={accounts.length < 2}
+          title={accounts.length < 2 ? 'Needs at least two accounts' : 'Move money between your own accounts'}
+        >
+          Move money
+        </button>
         <button className="btn primary" onClick={() => setOpen('project')}>
-          {compact ? 'New project' : 'New project'}
+          New project
         </button>
       </div>
 
       {open === 'receipt' && <ReceiptDialog lockedProject={locked} onClose={() => setOpen(null)} />}
       {open === 'expense' && <ExpenseDialog lockedProject={locked} onClose={() => setOpen(null)} />}
+      {open === 'transfer' && <TransferDialog lockedProject={locked} onClose={() => setOpen(null)} />}
       {open === 'project' && <ProjectDialog onClose={() => setOpen(null)} />}
     </>
   )

@@ -2,9 +2,10 @@ import { useState } from 'react'
 import Panel, { Empty } from '../components/Panel'
 import Measure from '../components/Measure'
 import MasterDialog from '../components/MasterDialog'
+import TransferDialog from '../components/TransferDialog'
 import { useApp } from '../store/AppStore'
 import { useScope } from '../store/ScopeContext'
-import { accountLedger, combinedLedger } from '../store/selectors'
+import { accountLedger, combinedLedger, ownMoneyAtRisk, transferLedger } from '../store/selectors'
 import { money, pct, shortDate } from '../lib/format'
 
 /**
@@ -24,9 +25,13 @@ export default function Accounts() {
   const totalOut = rows.reduce((t, a) => t + a.outflow, 0)
   const totalBalance = rows.reduce((t, a) => t + a.balance, 0)
 
-  const personalExposure = rows
-    .filter((a) => a.kind === 'personal')
-    .reduce((t, a) => t + Math.max(a.outflow - a.inflow, 0), 0)
+  const transfers = transferLedger(state, scope)
+  const moved = transfers.reduce((t, r) => t + r.amount, 0)
+
+  // Any account sitting below zero is money somebody is genuinely out of pocket
+  // for. Measuring it as "spent more than received" counted every rupee a
+  // partner spent, even when the company had funded them the day before.
+  const personalExposure = ownMoneyAtRisk(rows, 'personal')
 
   const deleteAccount = (account, movements) => {
     if (movements > 0) return
@@ -45,8 +50,10 @@ export default function Accounts() {
           tone={totalBalance < 0 ? 'warn' : 'left'}
           foot={
             personalExposure > 0
-              ? `${money(personalExposure)} of this is personal money spent on jobs — worth settling.`
-              : 'No personal money is currently tied up in projects.'
+              ? `${money(personalExposure)} is personal money out of pocket — worth settling.`
+              : moved > 0
+                ? `Includes ${money(moved)} moved between accounts.`
+                : 'No personal money is currently out of pocket.'
           }
         />
       </div>
@@ -54,9 +61,14 @@ export default function Accounts() {
       <Panel
         title={scope === 'all' ? 'Account positions' : 'Account movement on this project'}
         action={
-          <button className="btn tiny primary" onClick={() => setDialog({ kind: 'account' })}>
-            Add account
-          </button>
+          <>
+            <button className="btn tiny" onClick={() => setDialog({ kind: 'transfer' })}>
+              Move money
+            </button>
+            <button className="btn tiny primary" onClick={() => setDialog({ kind: 'account' })}>
+              Add account
+            </button>
+          </>
         }
         flush
       >
@@ -82,6 +94,8 @@ export default function Accounts() {
                   {scope === 'all' && <th className="right col-optional">Opening</th>}
                   <th className="right">In</th>
                   <th className="right">Out</th>
+                  <th className="right col-optional">Moved in</th>
+                  <th className="right col-optional">Moved out</th>
                   <th className="right">Balance</th>
                   <th className="right col-optional">Share of spend</th>
                   <th />
@@ -109,6 +123,8 @@ export default function Accounts() {
                       {scope === 'all' && <td className="amount note col-optional">{money(a.opening)}</td>}
                       <td className="amount">{money(a.inflow)}</td>
                       <td className="amount">{money(a.outflow)}</td>
+                      <td className="amount note col-optional">{a.transferIn ? money(a.transferIn) : '—'}</td>
+                      <td className="amount note col-optional">{a.transferOut ? money(a.transferOut) : '—'}</td>
                       <td className={`amount ${a.balance < 0 ? 'neg' : 'pos'}`} style={{ fontWeight: 600 }}>
                         {money(a.balance)}
                       </td>
@@ -148,6 +164,10 @@ export default function Accounts() {
                   </th>
                   <th className="amount">{money(totalIn)}</th>
                   <th className="amount">{money(totalOut)}</th>
+                  {/* Moved in and out always cancel across all accounts, so
+                      showing a total would only ever be noise. */}
+                  <th className="col-optional" />
+                  <th className="col-optional" />
                   <th className={`amount ${totalBalance < 0 ? 'neg' : 'pos'}`}>{money(totalBalance)}</th>
                   <th colSpan="2" />
                 </tr>
@@ -215,7 +235,101 @@ export default function Accounts() {
         )}
       </Panel>
 
-      {dialog && <MasterDialog kind={dialog.kind} row={dialog.row} onClose={() => setDialog(null)} />}
+      <Panel
+        title={`Money moved between accounts · ${transfers.length}`}
+        action={
+          <button className="btn tiny" onClick={() => setDialog({ kind: 'transfer' })}>
+            Move money
+          </button>
+        }
+        flush
+      >
+        {transfers.length === 0 ? (
+          <Empty
+            title="No transfers recorded"
+            action={
+              <button className="btn primary" onClick={() => setDialog({ kind: 'transfer' })}>
+                Move money
+              </button>
+            }
+          >
+            When the company account funds a partner so they can buy for a job, record it here. It keeps their
+            balance honest without ever counting as project income.
+          </Empty>
+        ) : (
+          <div className="table-wrap">
+            <table className="data tap-rows">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>From → To</th>
+                  <th className="col-optional">For</th>
+                  <th className="col-optional">Reference</th>
+                  <th className="right col-money">Amount</th>
+                  <th className="col-optional" />
+                </tr>
+              </thead>
+              <tbody>
+                {transfers.map((t) => (
+                  <tr key={t.id} onClick={() => setDialog({ kind: 'transfer', row: state.transfers.find((x) => x.id === t.id) })}>
+                    <td className="num" style={{ whiteSpace: 'nowrap' }}>
+                      {shortDate(t.date)}
+                    </td>
+                    <td>
+                      <span className="tag-row">
+                        {t.fromName} <span className="note">→</span> <strong style={{ fontWeight: 500 }}>{t.toName}</strong>
+                      </span>
+                      {t.note && <span className="sub-line">{t.note}</span>}
+                    </td>
+                    <td className="note col-optional">
+                      {t.projectName ? <span className="chip move">{t.projectName}</span> : '—'}
+                    </td>
+                    <td className="note col-optional">
+                      {t.mode}
+                      {t.reference ? ` · ${t.reference}` : ''}
+                    </td>
+                    <td className="amount col-money">{money(t.amount)}</td>
+                    <td className="col-optional">
+                      <div className="row-actions">
+                        <button
+                          className="btn ghost tiny"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setDialog({ kind: 'transfer', row: state.transfers.find((x) => x.id === t.id) })
+                          }}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          className="btn ghost tiny danger"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            if (window.confirm(`Delete the ${money(t.amount)} transfer from ${t.fromName} to ${t.toName}?`)) {
+                              state.remove('transfers', t.id)
+                            }
+                          }}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Panel>
+
+      {dialog?.kind === 'transfer' ? (
+        <TransferDialog
+          existing={dialog.row}
+          lockedProject={scope !== 'all' && !dialog.row ? scope : null}
+          onClose={() => setDialog(null)}
+        />
+      ) : (
+        dialog && <MasterDialog kind={dialog.kind} row={dialog.row} onClose={() => setDialog(null)} />
+      )}
     </div>
   )
 }

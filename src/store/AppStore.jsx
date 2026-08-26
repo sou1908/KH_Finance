@@ -14,6 +14,8 @@ const EMPTY = {
   projects: [],
   receipts: [],
   expenses: [],
+  // Money moved between our own accounts. Never income, never spending.
+  transfers: [],
 }
 
 function reducer(state, action) {
@@ -38,6 +40,13 @@ function reducer(state, action) {
         projects: state.projects.filter((p) => p.id !== payload.id),
         receipts: state.receipts.filter((r) => r.projectId !== payload.id),
         expenses: state.expenses.filter((e) => e.projectId !== payload.id),
+        // Transfers are NOT deleted with the project. The money really did move
+        // between accounts; removing the record would leave every balance
+        // wrong. The earmark is cleared instead, so the cash history survives
+        // without pointing at a project that no longer exists.
+        transfers: state.transfers.map((t) =>
+          t.projectId === payload.id ? { ...t, projectId: '' } : t,
+        ),
       }
 
     case 'replaceAll':

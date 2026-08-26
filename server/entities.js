@@ -44,6 +44,17 @@ export const ENTITIES = {
     reference: 'reference',
     note: 'note',
   },
+  transfers: {
+    id: 'id',
+    date: 'date',
+    amount: 'amount',
+    fromAccountId: 'from_account_id',
+    toAccountId: 'to_account_id',
+    projectId: 'project_id',
+    mode: 'mode',
+    reference: 'reference',
+    note: 'note',
+  },
   expenses: {
     id: 'id',
     projectId: 'project_id',
@@ -62,14 +73,16 @@ export const ENTITIES = {
 }
 
 /** Entities whose rows can carry attachments. */
-export const ATTACHABLE = ['projects', 'receipts', 'expenses']
+export const ATTACHABLE = ['projects', 'receipts', 'expenses', 'transfers']
 
 // DECIMAL arrives as a string so precision is never lost in transit; the
 // browser wants numbers, and these are the fields to convert.
 const NUMERIC = new Set(['amount', 'rate', 'qty', 'usedQty', 'quotedAmount', 'openingBalance'])
 const BOOLEAN = new Set(['tracksInventory'])
 const NULLABLE_DATE = new Set(['startDate', 'date'])
-const NULLABLE_REF = new Set(['clientId', 'accountId', 'categoryId'])
+// projectId is deliberately absent: on receipts and expenses the column is NOT
+// NULL, so turning an empty string into NULL there would fail the insert.
+const NULLABLE_REF = new Set(['clientId', 'accountId', 'categoryId', 'fromAccountId', 'toAccountId'])
 
 export function rowToJson(row, fields) {
   const out = {}
