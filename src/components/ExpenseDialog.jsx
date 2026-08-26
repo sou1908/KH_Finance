@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import Dialog, { Field } from './Dialog'
 import Attachments from './Attachments'
+import UnitSelect from './UnitSelect'
 import { useApp } from '../store/AppStore'
 import { newId } from '../data/repo'
 import { money, num, today } from '../lib/format'
@@ -316,10 +317,10 @@ export default function ExpenseDialog({ existing, lockedProject, onClose }) {
                   />
                 </Field>
                 <Field label="Unit">
-                  <input
+                  <UnitSelect
                     value={item.unit}
-                    onChange={(e) => setItem(index, 'unit', e.target.value)}
-                    placeholder={category?.unit || 'pcs'}
+                    onChange={(unit) => setItem(index, 'unit', unit)}
+                    placeholder={category?.unit ? `${category.unit} (head default)` : 'Select a unit'}
                   />
                 </Field>
                 <Field label="Rate (₹)">

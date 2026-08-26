@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import Dialog, { Field } from './Dialog'
+import UnitSelect from './UnitSelect'
 import { useApp } from '../store/AppStore'
 import { ACCOUNT_KINDS } from '../data/masters'
 import { money } from '../lib/format'
@@ -80,7 +81,7 @@ export default function MasterDialog({ kind, row, onClose }) {
         {kind === 'category' && (
           <>
             <Field label="Default unit" hint="Prefills the unit when recording a bill under this head">
-              <input value={form.unit} onChange={set('unit')} placeholder="sheet, pcs, day…" />
+              <UnitSelect value={form.unit} onChange={(unit) => setForm((f) => ({ ...f, unit }))} />
             </Field>
             <Field label="Stock tracking" hint="Tick this for heads that buy physical material you may have left over">
               <label className="note" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>

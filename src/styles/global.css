@@ -780,6 +780,11 @@ table.data .amount {
 
 .hint-line em { color: var(--ink); font-style: normal; font-weight: 600; }
 
+/* Escape hatch for a unit the shared list does not cover. */
+.unit-custom { display: flex; gap: 6px; align-items: center; }
+.unit-custom input { flex: 1; min-width: 0; }
+.unit-custom .btn { flex: 0 0 auto; white-space: nowrap; }
+
 /* ------------------------------------------------------------- attachments */
 
 .dropzone {
