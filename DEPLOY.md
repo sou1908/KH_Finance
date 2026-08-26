@@ -1,5 +1,14 @@
 # Deploying Kalope Homes Finance on Hostinger
 
+> **This is running in production.** Confirmed working on Hostinger with
+> Node 22.18, MariaDB 11.8, the schema built by the app itself, and uploads
+> stored outside the deployed folder. The settings below are the ones that
+> worked — the deployment must run a Node server, not publish `dist/` as a
+> static site. If a preset serves static files only, `/api` never exists and
+> every request returns the host's own 503.
+>
+> `/status.html` diagnoses a broken deployment without needing the API.
+
 One repo, one deployment. The Node server serves the built React app **and**
 answers `/api` from the same origin, so there is no second thing to deploy and
 no CORS to configure.
@@ -120,7 +129,8 @@ Then open the site and sign in with `ADMIN_EMAIL` / `ADMIN_PASSWORD`.
 
 `/api/health` names the step. It stays open deliberately — it exists for the
 case where nobody can log in, so putting it behind a session would defeat it. It
-reports codes and counts only: never a host, user, database name or password.
+never reports a host, user, database name or password, and while signed out it
+reports only whether a login exists — not how much is in the ledger.
 
 | What health says | What it means | What to change |
 |---|---|---|

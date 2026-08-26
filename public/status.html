@@ -149,38 +149,14 @@
           'and nothing is handling /api.'
         : '/api/ping returned ' + (ping.status || 'no response') + ' instead of JSON. ' + ping.text.slice(0, 160))
 
-    // Node is out. The remaining question is whether this host runs PHP,
-    // because that decides which backend can work here at all.
-    return probe('/php-check.php').then(function (php) {
-      raw.push('', 'GET /php-check.php -> ' + php.status + '  (' + php.ms + 'ms)', php.text.slice(0, 400))
-
-      if (php.body && php.body.php) {
-        addCheck('ok', 'PHP works on this host',
-          'PHP ' + php.body.version + '. pdo_mysql: ' + (php.body.pdo_mysql ? 'yes' : 'NO') +
-          ', fileinfo: ' + (php.body.fileinfo ? 'yes' : 'no') + '.')
-        verdict('bad', 'Node will not run here, but PHP will', [
-          'This deployment publishes static files and never starts a Node process.',
-          'PHP does execute, so a PHP backend would work on this host today.',
-          php.body.pdo_mysql
-            ? 'pdo_mysql is available, so PHP can reach your MySQL database.'
-            : 'WARNING: pdo_mysql is missing, so PHP cannot reach MySQL. Enable it in hPanel first.',
-          'Send me this page and I will restore the PHP backend — it is still in git history.',
-          'Alternatively, if your plan has a separate Node.js app section in hPanel, that would run the server as built.'
-        ])
-        return
-      }
-
-      addCheck('bad', 'PHP does not run here either',
-        '/php-check.php returned ' + php.status + ' instead of JSON, so the host is serving it as a plain file.')
-      verdict('bad', 'This deployment serves static files only', [
-        'Neither Node nor PHP executes here — it is pure static hosting.',
-        'In the deployment settings: Build command "npm run build", Start command "npm start".',
-        'If the framework preset is Vite or Static, change it to Node.js / Express — anything that lets you set a start command.',
-        'If there is no such option, this deployment product cannot host a backend at all.',
-        'Check hPanel for a separate "Node.js app" section, or a plan that supports one.',
-        'Send me this page either way and I will tell you the shortest route from here.'
-      ])
-    })
+    verdict('bad', 'Static files only — the server is not running', [
+      'This page proves the deployment publishes dist/ and the web server works.',
+      'But no Node process is answering /api, so there is no login and no database.',
+      'The deployment must run a Node server: build command "npm run build", start command "npm start".',
+      'If the framework preset is Vite or Static, change it to Node.js / Express — anything that lets you set a start command.',
+      'Then check the runtime log for lines starting [kalope]. The first is printed before any module loads, so no such lines at all means the process was never started.',
+      'If the log says PORT was not set, the host is not telling the app which port to use.'
+    ])
   })
 
   function reportHealth(health) {
@@ -197,10 +173,13 @@
         (b.columnsAdded ? '. Added: ' + b.columnsAdded.join(', ') : '') + '.')
     }
     if (b.rows) {
+      // The ledger counts are only present for a signed-in viewer.
+      var detail = b.rows.projects === undefined
+        ? (b.rowsNote || 'Ledger counts are hidden while signed out.')
+        : 'projects ' + b.rows.projects + ', receipts ' + b.rows.receipts +
+          ', expenses ' + b.rows.expenses + ', attachments ' + b.rows.attachments + '.'
       addCheck(b.rows.users > 0 ? 'ok' : 'bad',
-        b.rows.users > 0 ? 'A login exists' : 'No login has been created',
-        'users ' + b.rows.users + ', projects ' + b.rows.projects +
-        ', receipts ' + b.rows.receipts + ', expenses ' + b.rows.expenses + '.')
+        b.rows.users > 0 ? 'A login exists' : 'No login has been created', detail)
     }
     if (b.uploads) {
       addCheck(b.uploads.writable ? (b.uploads.insideAppFolder ? 'wait' : 'ok') : 'bad',

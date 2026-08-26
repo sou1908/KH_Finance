@@ -111,7 +111,8 @@ batch is harmless. That's what makes retrying safe.
 
 | Route | Does |
 |---|---|
-| `GET /health` | Names the failing step (config / connect / schema / query / uploads) plus the driver code. Open by design — it exists for when nobody can log in. Reports codes and counts only, never a hostname or password. |
+| `GET /ping` | Liveness only — touches no database and no disk. Separates "the app is broken" from "the host never started it". |
+| `GET /health` | Names the failing step (config / connect / schema / query / uploads) plus the driver code. Open by design — it exists for when nobody can log in. Never reports a hostname or password, and while signed out reports only whether a login exists, not how much is in the ledger. |
 | `POST /auth/login` | Email + password → session token |
 | `GET /state` | The whole ledger in one response |
 | `POST /sync` | A batch of queued changes, applied transactionally |

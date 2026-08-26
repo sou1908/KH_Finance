@@ -99,6 +99,26 @@ export async function requireUser(req, res, next) {
   }
 }
 
+/** The signed-in user, or null. Never rejects — for endpoints open to everyone. */
+export async function optionalUser(req) {
+  const token = bearer(req)
+  if (!token) return null
+
+  try {
+    const rows = await query(
+      `SELECT u.id, u.email, u.role
+         FROM sessions s
+         JOIN users u ON u.id = s.user_id
+        WHERE s.token = ? AND s.expires_at > NOW()
+        LIMIT 1`,
+      [token],
+    )
+    return rows[0] ?? null
+  } catch {
+    return null
+  }
+}
+
 export async function destroySession(req) {
   const token = bearer(req)
   if (token) await query('DELETE FROM sessions WHERE token = ?', [token]).catch(() => {})

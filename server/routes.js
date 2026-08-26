@@ -3,7 +3,7 @@ import multer from 'multer'
 import { config, configWarnings, missingConfig } from './config.js'
 import { driverHint, getPool, query, transaction } from './db.js'
 import { SCHEMA_VERSION, ensureSchema } from './schema.js'
-import { createSession, destroySession, requireUser, verifyPassword } from './auth.js'
+import { createSession, destroySession, optionalUser, requireUser, verifyPassword } from './auth.js'
 import { applyOp, loadState } from './sync.js'
 import { newId } from './ids.js'
 import { readFile, sniffType, uploadDirStatus, writeFile } from './files.js'
@@ -61,11 +61,19 @@ api.get('/health', async (req, res) => {
     if (migration.adminCreated) out.adminCreated = true
 
     step = 'query'
+
+    // How much work is in the ledger is nobody else's business. Signed out,
+    // this reports only whether a login exists — the one count that matters
+    // when diagnosing "nobody can get in". Signed in, it reports the lot.
+    const viewer = await optionalUser(req)
+    const tables = viewer ? ['users', 'projects', 'receipts', 'expenses', 'attachments'] : ['users']
+
     out.rows = {}
-    for (const table of ['users', 'projects', 'receipts', 'expenses', 'attachments']) {
+    for (const table of tables) {
       const [[row]] = await getPool().query(`SELECT COUNT(*) AS n FROM \`${table}\``)
       out.rows[table] = Number(row.n)
     }
+    if (!viewer) out.rowsNote = 'Sign in to see the full counts.'
 
     step = 'uploads'
     out.uploads = await uploadDirStatus()
