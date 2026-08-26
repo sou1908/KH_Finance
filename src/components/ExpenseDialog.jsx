@@ -3,90 +3,196 @@ import Dialog, { Field } from './Dialog'
 import Attachments from './Attachments'
 import { useApp } from '../store/AppStore'
 import { newId } from '../data/repo'
-import { money, today } from '../lib/format'
+import { money, num, today } from '../lib/format'
 
-// The id is minted here rather than on save, so a bill photo attached before
-// the form is submitted already knows which expense it belongs to.
-const blank = (projectId) => ({
+/**
+ * One shop bill, one form.
+ *
+ * A bill from a hardware shop usually lists several items under the same date,
+ * vendor and bill number. So the form splits in two: the bill's details are
+ * entered once, and the items below repeat.
+ *
+ * Each item is saved as its OWN expense row rather than as lines nested inside
+ * one. An expense row already is a line item — it carries quantity, unit, rate
+ * and how much has been used on site — and inventory, the stock pool and the
+ * leftover figures all work per row. Nesting would need a schema change and
+ * would break all three, for no gain: three items on one bill genuinely are
+ * three things to track.
+ */
+
+// Ids are minted up front so a bill photo attached before the form is submitted
+// already knows which expense it belongs to.
+const blankItem = (unit = '') => ({
   id: newId('exp'),
+  description: '',
+  qty: 1,
+  unit,
+  rate: '',
+  amount: '',
+  usedQty: 0,
+})
+
+const blankBill = (projectId) => ({
   projectId: projectId ?? '',
   date: today(),
   categoryId: '',
   accountId: '',
   vendor: '',
-  description: '',
-  qty: 1,
-  unit: '',
-  rate: '',
-  amount: '',
   billNo: '',
-  usedQty: 0,
   attachments: [],
 })
 
+/** An existing row is one item; editing never fans out into several. */
+function itemsFrom(existing) {
+  if (!existing) return [blankItem()]
+  return [
+    {
+      id: existing.id,
+      description: existing.description ?? '',
+      qty: existing.qty ?? 1,
+      unit: existing.unit ?? '',
+      rate: existing.rate ?? '',
+      amount: existing.amount ?? '',
+      usedQty: existing.usedQty ?? 0,
+    },
+  ]
+}
+
 export default function ExpenseDialog({ existing, lockedProject, onClose }) {
   const { projects, accounts, categories, add, update } = useApp()
-  const [form, setForm] = useState(() => ({ attachments: [], ...(existing ?? blank(lockedProject)) }))
+
+  const [bill, setBill] = useState(() => ({
+    ...blankBill(lockedProject),
+    ...(existing
+      ? {
+          projectId: existing.projectId,
+          date: existing.date,
+          categoryId: existing.categoryId,
+          accountId: existing.accountId,
+          vendor: existing.vendor ?? '',
+          billNo: existing.billNo ?? '',
+          attachments: existing.attachments ?? [],
+        }
+      : {}),
+  }))
+
+  const [items, setItems] = useState(() => itemsFrom(existing))
   const [error, setError] = useState('')
 
-  const category = categories.find((c) => c.id === form.categoryId)
+  const category = categories.find((c) => c.id === bill.categoryId)
   const tracksStock = Boolean(category?.tracksInventory)
+  const isEdit = Boolean(existing)
 
-  const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }))
+  const total = items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0)
 
-  // qty × rate keeps the amount honest; typing the amount directly still wins.
-  const setQtyOrRate = (key) => (e) => {
-    const value = e.target.value
-    setForm((f) => {
-      const next = { ...f, [key]: value }
-      const qty = Number(next.qty) || 0
-      const rate = Number(next.rate) || 0
-      if (qty && rate) next.amount = String(Math.round(qty * rate * 100) / 100)
-      return next
-    })
+  const setField = (key) => (e) => {
+    setError('')
+    setBill((b) => ({ ...b, [key]: e.target.value }))
   }
 
   const pickCategory = (e) => {
     const id = e.target.value
     const cat = categories.find((c) => c.id === id)
-    setForm((f) => ({ ...f, categoryId: id, unit: f.unit || cat?.unit || '' }))
+    setError('')
+    setBill((b) => ({ ...b, categoryId: id }))
+    // Fill in the head's unit on any item that has not been given one.
+    setItems((list) => list.map((item) => (item.unit ? item : { ...item, unit: cat?.unit ?? '' })))
+  }
+
+  const setItem = (index, key, value) => {
+    setError('')
+    setItems((list) =>
+      list.map((item, i) => {
+        if (i !== index) return item
+        const next = { ...item, [key]: value }
+        // Quantity × rate keeps the amount honest; typing the amount wins.
+        if (key === 'qty' || key === 'rate') {
+          const qty = Number(next.qty) || 0
+          const rate = Number(next.rate) || 0
+          if (qty && rate) next.amount = String(Math.round(qty * rate * 100) / 100)
+        }
+        return next
+      }),
+    )
+  }
+
+  const addItem = () => {
+    setError('')
+    setItems((list) => [...list, blankItem(category?.unit ?? '')])
+  }
+
+  const removeItem = (index) => {
+    setError('')
+    setItems((list) => (list.length === 1 ? list : list.filter((_, i) => i !== index)))
   }
 
   const submit = () => {
-    if (!form.projectId) return setError('Pick the project this bill belongs to.')
-    if (!form.categoryId) return setError('Pick the head this spend falls under.')
-    if (!form.accountId) return setError('Pick which account paid for it.')
-    const amount = Number(form.amount)
-    if (!amount || amount <= 0) return setError('Enter an amount greater than zero.')
+    if (!bill.projectId) return setError('Pick the project this bill belongs to.')
+    if (!bill.categoryId) return setError('Pick the head this spend falls under.')
+    if (!bill.accountId) return setError('Pick which account paid for it.')
 
-    const qty = Number(form.qty) || 0
-    const record = {
-      ...form,
-      amount,
-      qty,
-      rate: Number(form.rate) || 0,
-      usedQty: tracksStock ? Math.min(Number(form.usedQty) || 0, qty) : 0,
+    // Every row on screen must be a real item. An unwanted one is removed with
+    // its ✕ rather than left blank, so a blank row is a mistake worth naming.
+    const badIndex = items.findIndex((item) => !(Number(item.amount) > 0))
+    if (badIndex !== -1) {
+      return setError(
+        items.length === 1
+          ? 'Enter an amount greater than zero.'
+          : `Item ${badIndex + 1} has no amount. Fill it in, or remove the row.`,
+      )
     }
 
-    if (existing) update('expenses', record)
-    else add('expenses', record)
+    const records = items.map((item, index) => {
+      const qty = Number(item.qty) || 0
+      return {
+        ...item,
+        projectId: bill.projectId,
+        date: bill.date,
+        categoryId: bill.categoryId,
+        accountId: bill.accountId,
+        vendor: bill.vendor,
+        billNo: bill.billNo,
+        amount: Number(item.amount),
+        qty,
+        rate: Number(item.rate) || 0,
+        usedQty: tracksStock ? Math.min(Number(item.usedQty) || 0, qty) : 0,
+        // One photo of one bill: it belongs to the first item, and shows up in
+        // the project's Documents panel whichever row owns it.
+        attachments: index === 0 ? bill.attachments : [],
+      }
+    })
+
+    if (isEdit) update('expenses', records[0])
+    else records.forEach((record) => add('expenses', record))
+
     onClose()
   }
 
   return (
     <Dialog
-      title={existing ? 'Edit expense' : 'Record an expense'}
+      title={isEdit ? 'Edit expense' : 'Record an expense'}
       subtitle="Money going out — material, labour, transport, or fees."
       onClose={onClose}
       footer={
         <>
-          {error && <span className="neg" style={{ fontSize: 12.5 }}>{error}</span>}
+          {error ? (
+            <span className="neg" style={{ fontSize: 12.5 }}>{error}</span>
+          ) : (
+            items.length > 1 && (
+              <span className="note">
+                {items.length} items ·{' '}
+                <strong className="figure" style={{ color: 'var(--ember)' }}>
+                  {money(total)}
+                </strong>
+              </span>
+            )
+          )}
           <div className="spacer" />
           <button className="btn ghost" onClick={onClose}>
             Cancel
           </button>
           <button className="btn primary" onClick={submit}>
-            {existing ? 'Save changes' : 'Record expense'}
+            {isEdit ? 'Save changes' : items.length > 1 ? `Record ${items.length} items` : 'Record expense'}
           </button>
         </>
       }
@@ -94,7 +200,7 @@ export default function ExpenseDialog({ existing, lockedProject, onClose }) {
       <div className="dialog-body">
         <div className="field-row three">
           <Field label="Project">
-            <select value={form.projectId} onChange={set('projectId')} disabled={Boolean(lockedProject)}>
+            <select value={bill.projectId} onChange={setField('projectId')} disabled={Boolean(lockedProject)}>
               <option value="">Select a project</option>
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -103,8 +209,8 @@ export default function ExpenseDialog({ existing, lockedProject, onClose }) {
               ))}
             </select>
           </Field>
-          <Field label="Head">
-            <select value={form.categoryId} onChange={pickCategory}>
+          <Field label="Head" hint={items.length > 1 ? 'Applies to every item below' : undefined}>
+            <select value={bill.categoryId} onChange={pickCategory}>
               <option value="">Select head</option>
               {categories.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -114,16 +220,16 @@ export default function ExpenseDialog({ existing, lockedProject, onClose }) {
             </select>
           </Field>
           <Field label="Date">
-            <input type="date" value={form.date} onChange={set('date')} />
+            <input type="date" value={bill.date} onChange={setField('date')} />
           </Field>
         </div>
 
-        <div className="field-row">
+        <div className="field-row three">
           <Field label="Vendor / paid to">
-            <input value={form.vendor} onChange={set('vendor')} placeholder="e.g. Shree Ply Mart" />
+            <input value={bill.vendor} onChange={setField('vendor')} placeholder="e.g. Shree Ply Mart" />
           </Field>
           <Field label="Paid from" hint="Which account the money left">
-            <select value={form.accountId} onChange={set('accountId')}>
+            <select value={bill.accountId} onChange={setField('accountId')}>
               <option value="">Select account</option>
               {accounts.map((a) => (
                 <option key={a.id} value={a.id}>
@@ -132,56 +238,119 @@ export default function ExpenseDialog({ existing, lockedProject, onClose }) {
               ))}
             </select>
           </Field>
-        </div>
-
-        <Field label="Description">
-          <input value={form.description} onChange={set('description')} placeholder="e.g. 19mm BWP plywood" />
-        </Field>
-
-        <div className="field-row three">
-          <Field label="Quantity">
-            <input type="number" min="0" step="any" value={form.qty} onChange={setQtyOrRate('qty')} />
-          </Field>
-          <Field label="Unit">
-            <input value={form.unit} onChange={set('unit')} placeholder={category?.unit || 'pcs'} />
-          </Field>
-          <Field label="Rate (₹)">
-            <input type="number" min="0" step="any" value={form.rate} onChange={setQtyOrRate('rate')} />
-          </Field>
-        </div>
-
-        <div className="field-row">
-          <Field label="Amount (₹)" hint={form.amount ? money(form.amount) : 'Fills in from quantity × rate'}>
-            <input type="number" min="0" step="any" value={form.amount} onChange={set('amount')} />
-          </Field>
           <Field label="Bill no.">
-            <input value={form.billNo} onChange={set('billNo')} placeholder="Optional" />
+            <input value={bill.billNo} onChange={setField('billNo')} placeholder="Optional" />
           </Field>
         </div>
 
-        {tracksStock && (
-          <Field
-            label="Quantity used on site"
-            hint={`${category.name} is stock-tracked. Whatever is left counts as inventory still on site.`}
-          >
-            <input
-              type="number"
-              min="0"
-              max={form.qty}
-              step="any"
-              value={form.usedQty}
-              onChange={set('usedQty')}
-            />
-          </Field>
-        )}
+        <div className="items">
+          <div className="items-head">
+            <span className="eyebrow">{isEdit ? 'Item' : 'Items on this bill'}</span>
+            {!isEdit && items.length > 1 && (
+              <span className="items-total figure">{money(total)}</span>
+            )}
+          </div>
+
+          {items.map((item, index) => (
+            <div className="line-item" key={item.id}>
+              {items.length > 1 && (
+                <div className="line-item-bar">
+                  <span className="line-no">Item {index + 1}</span>
+                  <button
+                    type="button"
+                    className="btn ghost tiny danger"
+                    onClick={() => removeItem(index)}
+                    aria-label={`Remove item ${index + 1}`}
+                  >
+                    Remove
+                  </button>
+                </div>
+              )}
+
+              <Field label="Description">
+                <input
+                  value={item.description}
+                  onChange={(e) => setItem(index, 'description', e.target.value)}
+                  placeholder="e.g. 19mm BWP plywood"
+                />
+              </Field>
+
+              <div className={`field-row ${tracksStock ? 'four' : 'four'}`}>
+                <Field label="Quantity">
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={item.qty}
+                    onChange={(e) => setItem(index, 'qty', e.target.value)}
+                  />
+                </Field>
+                <Field label="Unit">
+                  <input
+                    value={item.unit}
+                    onChange={(e) => setItem(index, 'unit', e.target.value)}
+                    placeholder={category?.unit || 'pcs'}
+                  />
+                </Field>
+                <Field label="Rate (₹)">
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={item.rate}
+                    onChange={(e) => setItem(index, 'rate', e.target.value)}
+                  />
+                </Field>
+                <Field
+                  label="Amount (₹)"
+                  hint={item.amount ? money(item.amount) : 'From quantity × rate'}
+                >
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={item.amount}
+                    onChange={(e) => setItem(index, 'amount', e.target.value)}
+                  />
+                </Field>
+              </div>
+
+              {tracksStock && (
+                <Field
+                  label="Quantity used on site"
+                  hint={`${category.name} is stock-tracked — whatever is left counts as inventory on site.`}
+                >
+                  <input
+                    type="number"
+                    min="0"
+                    max={item.qty}
+                    step="any"
+                    value={item.usedQty}
+                    onChange={(e) => setItem(index, 'usedQty', e.target.value)}
+                  />
+                </Field>
+              )}
+            </div>
+          ))}
+
+          {!isEdit && (
+            <button type="button" className="btn add-item" onClick={addItem}>
+              <span aria-hidden="true">+</span> Add another item
+            </button>
+          )}
+        </div>
 
         <Attachments
           label="Bill / receipt"
-          hint="Photograph the bill on site — images are shrunk automatically before they are uploaded."
-          value={form.attachments}
+          hint={
+            items.length > 1
+              ? 'One photo covers the whole bill. It is filed against the first item and appears in the project’s Documents.'
+              : 'Photograph the bill on site — images are shrunk automatically before they are uploaded.'
+          }
+          value={bill.attachments}
           ownerType="expenses"
-          ownerId={form.id}
-          onChange={(attachments) => setForm((f) => ({ ...f, attachments }))}
+          ownerId={items[0]?.id}
+          onChange={(attachments) => setBill((b) => ({ ...b, attachments }))}
         />
       </div>
     </Dialog>

@@ -703,8 +703,69 @@ table.data .amount {
 
 .field .hint { font-size: 11.5px; color: var(--ink-3); }
 
-.field-row { display: grid; gap: 14px; grid-template-columns: repeat(2, 1fr); }
-.field-row.three { grid-template-columns: repeat(3, 1fr); }
+.field-row { display: grid; gap: 14px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.field-row.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.field-row.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+/* ------------------------------------------------------------- line items */
+/* One bill, several things bought. The bill's details are entered once above;
+   these repeat. Each becomes its own expense row on save. */
+
+.items { display: flex; flex-direction: column; gap: 10px; }
+
+.items-head { display: flex; align-items: baseline; gap: 10px; }
+
+.items-total {
+  margin-left: auto;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ember);
+}
+
+.line-item {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  background: var(--paper);
+}
+
+/* A single item needs no framing — it is just the form. */
+.items > .line-item:only-of-type {
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.line-item-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: -2px;
+}
+
+.line-no {
+  font-family: var(--font-data);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.line-item-bar .btn { margin-left: auto; }
+
+.add-item {
+  align-self: flex-start;
+  border-style: dashed;
+  color: var(--ink-2);
+  gap: 8px;
+}
+
+.add-item:hover { border-color: var(--brand-orange); color: var(--brand-orange); background: var(--ember-wash); }
+
+.add-item span { font-size: 15px; font-weight: 600; line-height: 1; }
 
 /* ------------------------------------------------------------- attachments */
 
@@ -1168,6 +1229,9 @@ table.data .amount {
   .page-head .btn { flex: 1 1 auto; justify-content: center; }
 
   .cols-2, .field-row, .field-row.three { grid-template-columns: minmax(0, 1fr); }
+  /* Quantity, unit, rate and amount stay paired two-up rather than stacking
+     into four full-width rows — they are read together. */
+  .field-row.four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
   .measure { padding: 0 14px 13px; }
   .measure-value { font-size: 25px; }
