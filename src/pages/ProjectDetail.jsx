@@ -88,6 +88,15 @@ export default function ProjectDetail() {
     if (record) setDialog({ kind: row.kind === 'in' ? 'receipt' : 'expense', row: record })
   }
 
+  /** For an entry that should never have been recorded at all. */
+  const deleteEntry = (row) => {
+    const entity = row.kind === 'in' ? 'receipts' : 'expenses'
+    const noun = row.kind === 'in' ? 'receipt' : 'expense'
+    const from = row.party ? ` from ${row.party}` : ''
+    if (!window.confirm(`Delete the ${money(row.amount)} ${noun}${from} dated ${shortDate(row.date)}?`)) return
+    state.remove(entity, row.id)
+  }
+
   const deleteProject = () => {
     if (!window.confirm(`Delete "${project.name}" and all ${ledger.length} of its entries? This cannot be undone.`)) return
     state.removeProject(project.id)
@@ -376,11 +385,21 @@ export default function ProjectDetail() {
                           <button
                             className="btn ghost tiny"
                             onClick={(e) => {
+                              // The row opens the editor too; don't do it twice.
                               e.stopPropagation()
                               editEntry(row)
                             }}
                           >
                             Edit
+                          </button>
+                          <button
+                            className="btn ghost tiny danger"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              deleteEntry(row)
+                            }}
+                          >
+                            Delete
                           </button>
                         </div>
                       </td>
