@@ -83,6 +83,9 @@ export default function ExpenseDialog({ existing, lockedProject, onClose }) {
   const tracksStock = Boolean(category?.tracksInventory)
   const isEdit = Boolean(existing)
 
+  // Named rather than hardcoded, since the heads are editable in Settings.
+  const stockHeads = categories.filter((c) => c.tracksInventory).map((c) => c.name)
+
   const total = items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0)
 
   const setField = (key) => (e) => {
@@ -92,11 +95,21 @@ export default function ExpenseDialog({ existing, lockedProject, onClose }) {
 
   const pickCategory = (e) => {
     const id = e.target.value
-    const cat = categories.find((c) => c.id === id)
+    const next = categories.find((c) => c.id === id)
+    const previousDefault = category?.unit ?? ''
+
     setError('')
     setBill((b) => ({ ...b, categoryId: id }))
-    // Fill in the head's unit on any item that has not been given one.
-    setItems((list) => list.map((item) => (item.unit ? item : { ...item, unit: cat?.unit ?? '' })))
+
+    // Refresh the unit on items that are still carrying a default — either
+    // blank, or the previous head's. A unit the user typed themselves is left
+    // alone. Without the second test, picking Labour and then Sheet leaves
+    // plywood measured in "day".
+    setItems((list) =>
+      list.map((item) =>
+        !item.unit || item.unit === previousDefault ? { ...item, unit: next?.unit ?? '' } : item,
+      ),
+    )
   }
 
   const setItem = (index, key, value) => {
@@ -251,6 +264,23 @@ export default function ExpenseDialog({ existing, lockedProject, onClose }) {
             )}
           </div>
 
+          {/* The "used on site" box is per item, but it only makes sense for a
+              head that buys physical stock. Without this note its absence reads
+              as a missing feature rather than as "you have not picked a head". */}
+          {!bill.categoryId && (
+            <p className="hint-line">
+              Pick a head above. Stock-tracked heads — {stockHeads.join(', ') || 'those marked in Settings'} — add a{' '}
+              <em>quantity used on site</em> box to every item.
+            </p>
+          )}
+
+          {bill.categoryId && !tracksStock && (
+            <p className="hint-line">
+              {category?.name} is not stock-tracked, so there is nothing left over to count. Turn that on in
+              Settings if this head buys material.
+            </p>
+          )}
+
           {items.map((item, index) => (
             <div className="line-item" key={item.id}>
               {items.length > 1 && (
@@ -275,7 +305,7 @@ export default function ExpenseDialog({ existing, lockedProject, onClose }) {
                 />
               </Field>
 
-              <div className={`field-row ${tracksStock ? 'four' : 'four'}`}>
+              <div className="field-row four">
                 <Field label="Quantity">
                   <input
                     type="number"
