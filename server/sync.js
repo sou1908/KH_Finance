@@ -156,7 +156,7 @@ async function removeProject(conn, id, userId) {
   await audit(conn, userId, 'removeProject', 'projects', id, null)
 }
 
-/** Backs "load demo data", "erase everything" and restoring a backup. */
+/** Backs "erase everything" and restoring a backup. Replaces the whole ledger. */
 async function replaceAll(conn, state, userId) {
   for (const entity of Object.keys(ENTITIES)) {
     await conn.query(`UPDATE \`${entity}\` SET deleted_at = NOW() WHERE deleted_at IS NULL`)

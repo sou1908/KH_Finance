@@ -3,7 +3,7 @@ import { load, save, newId } from '../data/repo'
 import { deleteFiles } from '../data/files'
 import { fetchState, getToken, getUser, isCloud, login as apiLogin, logout as apiLogout } from '../data/api'
 import { drain, enqueue, status as outboxStatus, subscribe } from '../data/outbox'
-import { seedState } from '../data/seed'
+import { DEFAULT_ACCOUNTS, DEFAULT_CATEGORIES } from '../data/masters'
 
 const AppContext = createContext(null)
 
@@ -57,12 +57,20 @@ function reducer(state, action) {
   }
 }
 
-// In cloud mode the local copy is a cache, so the app opens instantly and keeps
-// working offline. In local mode it is the only copy.
+/**
+ * In cloud mode the local copy is a cache, so the app opens instantly and keeps
+ * working offline; the server is the source of truth and seeds the masters
+ * itself. In local-only mode this is the only copy, so it starts with the same
+ * heads and accounts the server would have created — and nothing else.
+ *
+ * There is deliberately no sample project, client or bill. Invented figures in
+ * a ledger are indistinguishable from real ones after a week.
+ */
 function init() {
   const cached = load()
   if (cached) return cached
-  return isCloud() ? EMPTY : seedState()
+  if (isCloud()) return EMPTY
+  return { ...EMPTY, accounts: DEFAULT_ACCOUNTS, categories: DEFAULT_CATEGORIES }
 }
 
 export function AppProvider({ children }) {
@@ -142,11 +150,6 @@ export function AppProvider({ children }) {
           ...s.expenses.filter((e) => e.projectId === id),
         ])
         commit({ type: 'removeProject', payload: { id } }, { type: 'removeProject', entity: 'projects', payload: { id } })
-      },
-
-      resetDemo: () => {
-        const demo = seedState()
-        commit({ type: 'replaceAll', payload: demo }, { type: 'replaceAll', entity: 'all', payload: demo })
       },
 
       clearAll: () => {

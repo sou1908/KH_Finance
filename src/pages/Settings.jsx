@@ -71,6 +71,33 @@ export default function Settings() {
     }
   }
 
+  /**
+   * The only destructive button left. It names what is about to go, because
+   * "delete everything?" is easy to click past when the answer feels obvious
+   * and the ledger has a year of work in it.
+   */
+  const eraseEverything = () => {
+    const counts = [
+      [state.projects.length, 'project'],
+      [state.receipts.length, 'receipt'],
+      [state.expenses.length, 'expense'],
+      [state.transfers.length, 'transfer'],
+      [allAttachments.length, 'attached file'],
+    ]
+      .filter(([n]) => n > 0)
+      .map(([n, noun]) => `${n} ${noun}${n === 1 ? '' : 's'}`)
+
+    if (counts.length === 0) {
+      window.alert('There is nothing to erase yet.')
+      return
+    }
+
+    if (!window.confirm(`Erase ${counts.join(', ')}?\n\nTake a backup first if you are not certain.`)) return
+    if (!window.confirm('Last check — this clears the ledger. Continue?')) return
+
+    state.clearAll()
+  }
+
   const importBackup = (e) => {
     const file = e.target.files?.[0]
     e.target.value = ''
@@ -299,18 +326,7 @@ export default function Settings() {
             </button>
             <input ref={fileRef} type="file" accept="application/json" hidden onChange={importBackup} />
             <div className="spacer" />
-            <button
-              className="btn"
-              onClick={() => window.confirm('Replace everything with the demo project set?') && state.resetDemo()}
-            >
-              Load demo data
-            </button>
-            <button
-              className="btn danger"
-              onClick={() =>
-                window.confirm('Delete every project, receipt and bill in this browser?') && state.clearAll()
-              }
-            >
+            <button className="btn danger" onClick={eraseEverything}>
               Erase everything
             </button>
           </div>
