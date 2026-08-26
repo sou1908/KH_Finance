@@ -78,6 +78,16 @@ export default function ProjectDetail() {
 
   const reopen = () => state.update('projects', { ...project, status: 'Active' })
 
+  /**
+   * The ledger merges receipts and expenses into one list, so opening a row for
+   * editing means going back to whichever table it actually came from.
+   */
+  const editEntry = (row) => {
+    const entity = row.kind === 'in' ? 'receipts' : 'expenses'
+    const record = state[entity].find((r) => r.id === row.id)
+    if (record) setDialog({ kind: row.kind === 'in' ? 'receipt' : 'expense', row: record })
+  }
+
   const deleteProject = () => {
     if (!window.confirm(`Delete "${project.name}" and all ${ledger.length} of its entries? This cannot be undone.`)) return
     state.removeProject(project.id)
@@ -326,19 +336,26 @@ export default function ProjectDetail() {
             </Empty>
           ) : (
             <div className="table-wrap">
-              <table className="data">
+              {/* tap-rows: on a phone the Edit button is hidden and the row
+                  itself opens the entry, freeing the width the amount needs. */}
+              <table className="data tap-rows">
                 <thead>
                   <tr>
                     <th>Date</th>
                     <th>Head</th>
                     <th>Party / detail</th>
-                    <th>Account</th>
-                    <th className="right">Amount</th>
+                    <th className="col-optional">Account</th>
+                    <th className="right col-money">Amount</th>
+                    <th className="col-optional" />
                   </tr>
                 </thead>
                 <tbody>
                   {ledger.map((row) => (
-                    <tr key={`${row.kind}-${row.id}`}>
+                    <tr
+                      key={`${row.kind}-${row.id}`}
+                      onClick={() => editEntry(row)}
+                      title="Open this entry to edit it"
+                    >
                       <td className="num" style={{ whiteSpace: 'nowrap' }}>
                         {shortDate(row.date)}
                       </td>
@@ -349,10 +366,23 @@ export default function ProjectDetail() {
                         {row.party || '—'}
                         {row.detail && <span className="sub-line">{row.detail}</span>}
                       </td>
-                      <td className="note">{row.account}</td>
-                      <td className={`amount ${row.kind === 'in' ? 'pos' : ''}`}>
+                      <td className="note col-optional">{row.account}</td>
+                      <td className={`amount col-money ${row.kind === 'in' ? 'pos' : ''}`}>
                         {row.kind === 'in' ? '+' : '−'}
                         {money(row.amount)}
+                      </td>
+                      <td className="col-optional">
+                        <div className="row-actions">
+                          <button
+                            className="btn ghost tiny"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              editEntry(row)
+                            }}
+                          >
+                            Edit
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -363,8 +393,12 @@ export default function ProjectDetail() {
         </Panel>
       </div>
 
-      {dialog?.kind === 'receipt' && <ReceiptDialog lockedProject={id} onClose={() => setDialog(null)} />}
-      {dialog?.kind === 'expense' && <ExpenseDialog lockedProject={id} onClose={() => setDialog(null)} />}
+      {dialog?.kind === 'receipt' && (
+        <ReceiptDialog existing={dialog.row} lockedProject={id} onClose={() => setDialog(null)} />
+      )}
+      {dialog?.kind === 'expense' && (
+        <ExpenseDialog existing={dialog.row} lockedProject={id} onClose={() => setDialog(null)} />
+      )}
       {dialog?.kind === 'project' && <ProjectDialog existing={dialog.row} onClose={() => setDialog(null)} />}
       {dialog?.kind === 'complete' && (
         <CompleteProjectDialog project={project} onClose={() => setDialog(null)} />
