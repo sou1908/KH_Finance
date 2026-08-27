@@ -58,6 +58,17 @@ export const ENTITIES = {
     rate: 'rate',
     note: 'note',
   },
+  movements: {
+    id: 'id',
+    expenseId: 'expense_id',
+    type: 'type',
+    qty: 'qty',
+    fromProjectId: 'from_project_id',
+    toProjectId: 'to_project_id',
+    date: 'date',
+    note: 'note',
+    userId: 'user_id',
+  },
   transfers: {
     id: 'id',
     date: 'date',
@@ -96,7 +107,11 @@ const BOOLEAN = new Set(['tracksInventory'])
 const NULLABLE_DATE = new Set(['startDate', 'date'])
 // projectId is deliberately absent: on receipts and expenses the column is NOT
 // NULL, so turning an empty string into NULL there would fail the insert.
-const NULLABLE_REF = new Set(['clientId', 'accountId', 'categoryId', 'fromAccountId', 'toAccountId'])
+const NULLABLE_REF = new Set([
+  'clientId', 'accountId', 'categoryId',
+  'fromAccountId', 'toAccountId',
+  'fromProjectId', 'toProjectId', 'userId',
+])
 
 export function rowToJson(row, fields) {
   const out = {}

@@ -3,7 +3,8 @@ import multer from 'multer'
 import { config, configWarnings, missingConfig } from './config.js'
 import { driverHint, getPool, query, transaction } from './db.js'
 import { SCHEMA_VERSION, ensureSchema } from './schema.js'
-import { createSession, destroySession, optionalUser, requireUser, verifyPassword } from './auth.js'
+import { createSession, destroySession, hashPassword, optionalUser, requireUser, verifyPassword } from './auth.js'
+import { ROLES, ROLE_LABELS, filterStateFor, isOwner, refuseWrite } from './roles.js'
 import { applyOp, loadState } from './sync.js'
 import { newId } from './ids.js'
 import { readFile, sniffType, uploadDirStatus, writeFile } from './files.js'
@@ -131,6 +132,113 @@ api.post(
 
 api.get('/auth/me', requireUser, (req, res) => res.json({ user: req.user }))
 
+/* ------------------------------------------------------------------- users */
+
+/** Only an owner may see or change who can sign in. */
+const requireOwner = (req, res, next) =>
+  isOwner(req.user) ? next() : res.status(403).json({ error: 'Only an owner can manage logins.' })
+
+api.get(
+  '/users',
+  requireUser,
+  requireOwner,
+  wrap(async (req, res) => {
+    await ensureSchema()
+    // No password hashes leave the server, not even to an owner.
+    const rows = await query('SELECT id, email, name, role, created_at FROM users ORDER BY created_at ASC')
+    res.json({
+      users: rows.map((u) => ({
+        id: u.id,
+        email: u.email,
+        name: u.name,
+        role: u.role,
+        createdAt: u.created_at,
+        isYou: u.id === req.user.id,
+      })),
+      roles: Object.entries(ROLE_LABELS).map(([value, label]) => ({ value, label })),
+    })
+  }),
+)
+
+api.post(
+  '/users',
+  requireUser,
+  requireOwner,
+  wrap(async (req, res) => {
+    const email = String(req.body?.email ?? '').trim().toLowerCase()
+    const password = String(req.body?.password ?? '')
+    const name = String(req.body?.name ?? '').trim()
+    const role = String(req.body?.role ?? ROLES.PROCUREMENT)
+
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+      return res.status(400).json({ error: 'That does not look like an email address.' })
+    }
+    if (password.length < 8) {
+      return res.status(400).json({ error: 'Use a password of at least 8 characters.' })
+    }
+    if (!Object.values(ROLES).includes(role)) {
+      return res.status(400).json({ error: 'Unknown role.' })
+    }
+
+    await ensureSchema()
+    const existing = await query('SELECT id FROM users WHERE email = ? LIMIT 1', [email])
+    if (existing.length) {
+      return res.status(409).json({ error: 'Someone already signs in with that email.' })
+    }
+
+    const id = newId('usr')
+    await query('INSERT INTO users (id, email, password_hash, name, role) VALUES (?, ?, ?, ?, ?)', [
+      id,
+      email,
+      await hashPassword(password),
+      name || email,
+      role,
+    ])
+
+    res.json({ user: { id, email, name: name || email, role } })
+  }),
+)
+
+api.post(
+  '/users/:id/password',
+  requireUser,
+  requireOwner,
+  wrap(async (req, res) => {
+    const password = String(req.body?.password ?? '')
+    if (password.length < 8) {
+      return res.status(400).json({ error: 'Use a password of at least 8 characters.' })
+    }
+
+    await query('UPDATE users SET password_hash = ? WHERE id = ?', [await hashPassword(password), req.params.id])
+    // Changing a password ends that person's other sessions.
+    await query('DELETE FROM sessions WHERE user_id = ?', [req.params.id])
+    res.json({ ok: true })
+  }),
+)
+
+api.delete(
+  '/users/:id',
+  requireUser,
+  requireOwner,
+  wrap(async (req, res) => {
+    if (req.params.id === req.user.id) {
+      return res.status(400).json({ error: 'You cannot remove your own login.' })
+    }
+
+    const owners = await query('SELECT COUNT(*) AS n FROM users WHERE role = ?', [ROLES.OWNER])
+    const target = await query('SELECT role FROM users WHERE id = ? LIMIT 1', [req.params.id])
+
+    // Never leave the business with no way in.
+    if (target[0]?.role === ROLES.OWNER && Number(owners[0].n) <= 1) {
+      return res.status(400).json({ error: 'That is the last owner. Add another before removing this one.' })
+    }
+
+    await query('DELETE FROM sessions WHERE user_id = ?', [req.params.id])
+    await query('DELETE FROM users WHERE id = ?', [req.params.id])
+    res.json({ ok: true })
+  }),
+)
+
 /* ------------------------------------------------------------------ ledger */
 
 /** The whole ledger in one response — what the app loads on sign-in. */
@@ -141,7 +249,9 @@ api.get(
     await ensureSchema()
     const conn = await getPool().getConnection()
     try {
-      res.json(await loadState(conn))
+      // Filtered here, on the way out. Trimming it in the browser would be a
+      // curtain, not a control — anyone can call this endpoint directly.
+      res.json(filterStateFor(req.user, await loadState(conn)))
     } finally {
       conn.release()
     }
@@ -163,6 +273,13 @@ api.post(
     if (ops.length > 500) return res.status(413).json({ error: 'Too many operations in one batch.' })
 
     await ensureSchema()
+
+    // Checked before anything is applied, so a batch mixing an allowed write
+    // with a forbidden one is refused whole rather than half-written.
+    for (const op of ops) {
+      const refusal = refuseWrite(req.user, op)
+      if (refusal) return res.status(403).json({ error: refusal })
+    }
 
     try {
       const applied = await transaction(async (conn) => {

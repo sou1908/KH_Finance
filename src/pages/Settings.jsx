@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import Panel, { Empty } from '../components/Panel'
 import MasterDialog from '../components/MasterDialog'
+import UsersPanel from '../components/UsersPanel'
 import { ENTITIES, WITH_FILES, useApp } from '../store/AppStore'
 import { getFile, humanSize, putFile, storageEstimate } from '../data/files'
 import { money } from '../lib/format'
@@ -383,6 +384,8 @@ export default function Settings() {
         </Panel>
 
         <ItemsPanel state={state} setDialog={setDialog} />
+
+        <UsersPanel />
 
         <Panel title="Your data">
           <p className="note" style={{ marginTop: 0 }}>

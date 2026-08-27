@@ -13,7 +13,7 @@ export async function loadState(conn) {
   for (const [entity, fields] of Object.entries(ENTITIES)) {
     // Dated rows sort by date; masters sort by name. Getting this wrong is not
     // a cosmetic problem — ordering by a column the table does not have throws.
-    const dated = entity === 'receipts' || entity === 'expenses' || entity === 'transfers'
+    const dated = ['receipts', 'expenses', 'transfers', 'movements'].includes(entity)
     const order = dated ? '`date` DESC, id DESC' : 'name ASC'
     const [rows] = await conn.query(`SELECT * FROM \`${entity}\` WHERE deleted_at IS NULL ORDER BY ${order}`)
     state[entity] = rows.map((row) => rowToJson(row, fields))
@@ -75,12 +75,17 @@ async function upsert(conn, entity, row, userId) {
   const id = String(row.id ?? '')
   if (!id) throw new Error(`A ${entity} row arrived without an id`)
 
+  // Who recorded a movement is stamped here from the session, and whatever the
+  // browser sent for it is discarded. An audit trail the client can write is
+  // not an audit trail: it would record whoever the sender claimed to be.
+  const source = entity === 'movements' ? { ...row, userId: userId ?? null } : row
+
   const columns = []
   const values = []
   for (const [jsKey, column] of Object.entries(fields)) {
-    if (!Object.hasOwn(row, jsKey)) continue
+    if (!Object.hasOwn(source, jsKey)) continue
     columns.push(column)
-    values.push(normalise(jsKey, row[jsKey]))
+    values.push(normalise(jsKey, source[jsKey]))
   }
 
   const placeholders = columns.map(() => '?').join(', ')
@@ -98,7 +103,7 @@ async function upsert(conn, entity, row, userId) {
     await syncAttachments(conn, entity, id, Array.isArray(row.attachments) ? row.attachments : [])
   }
 
-  await audit(conn, userId, 'upsert', entity, id, row)
+  await audit(conn, userId, "upsert", entity, id, source)
 }
 
 /** Points the listed files at this row and retires any it no longer claims. */

@@ -100,6 +100,13 @@ export async function logout() {
   setSession(null)
 }
 
+/* Logins. Owner-only on the server; these just call it. */
+export const listUsers = () => request('/users')
+export const createUser = (body) => request('/users', { method: 'POST', body })
+export const setUserPassword = (id, password) =>
+  request(`/users/${id}/password`, { method: 'POST', body: { password } })
+export const removeUser = (id) => request(`/users/${id}`, { method: 'DELETE' })
+
 export const health = () => request('/health')
 export const fetchState = () => request('/state')
 export const pushOps = (ops) => request('/sync', { method: 'POST', body: { ops } })

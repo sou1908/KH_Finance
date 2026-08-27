@@ -22,6 +22,9 @@ const EMPTY = {
   expenses: [],
   // Money moved between our own accounts. Never income, never spending.
   transfers: [],
+  // What happened to material after it was bought: used at site, moved to
+  // another job, or returned. Quantities only — never money.
+  movements: [],
 }
 
 /**
@@ -35,6 +38,9 @@ export const ENTITIES = Object.keys(EMPTY)
 
 /** The rows that can hold an attached file. */
 export const WITH_FILES = ['projects', 'receipts', 'expenses', 'transfers']
+
+/** Roles, mirroring server/roles.js. The server is what enforces them. */
+export const ROLES = { OWNER: 'owner', PROCUREMENT: 'procurement' }
 
 function reducer(state, action) {
   const { type, entity, payload } = action
@@ -196,6 +202,11 @@ export function AppProvider({ children }) {
     () => ({
       user,
       isCloud: isCloud(),
+      // Convenience for the shell. The server is what actually enforces this;
+      // these only decide what to bother rendering.
+      role: user?.role ?? ROLES.OWNER,
+      isOwner: (user?.role ?? ROLES.OWNER) === ROLES.OWNER,
+      isProcurement: user?.role === ROLES.PROCUREMENT,
       signIn: async (email, password) => {
         const signedIn = await apiLogin(email, password)
         setUser(signedIn)

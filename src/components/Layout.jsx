@@ -27,13 +27,21 @@ const NAV = [
   },
 ]
 
+const PROCUREMENT_NAV = [
+  { group: 'Site', items: [{ to: '/', label: 'Material', tick: '00', end: true }] },
+]
+
 export default function Layout() {
   const { projects, auth } = useApp()
   const { scope, setScope } = useScope()
   const { pathname } = useLocation()
 
+  // Procurement has one destination and no money, so the rail collapses to it
+  // and the top bar loses the project picker and the add buttons entirely.
+  const nav = auth.isProcurement ? PROCUREMENT_NAV : NAV
+
   // The project picker is meaningless on pages that carry their own project.
-  const showScope = !pathname.startsWith('/projects/') && pathname !== '/settings'
+  const showScope = !auth.isProcurement && !pathname.startsWith('/projects/') && pathname !== '/settings'
 
   return (
     <div className="shell">
@@ -47,7 +55,7 @@ export default function Layout() {
         </div>
 
         <nav className="rail-nav">
-          {NAV.map((section) => (
+          {nav.map((section) => (
             <div key={section.group}>
               <div className="rail-group">{section.group}</div>
               {section.items.map((item) => (

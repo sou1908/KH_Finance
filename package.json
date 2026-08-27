@@ -15,7 +15,8 @@
     "prestart": "node server/prestart.mjs",
     "start": "node server/index.js",
     "test:e2e": "node server/e2e.mjs",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:roles": "node server/roles.e2e.mjs"
   },
   "dependencies": {
     "express": "^5.2.1",

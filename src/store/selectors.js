@@ -159,7 +159,72 @@ export function transferLedger(state, projectId) {
 }
 
 /**
- * Inventory Left = what was bought minus what was consumed, for the heads
+ * Where a purchase line's material currently stands, project by project.
+ *
+ * A line starts wholly at the project it was bought for. Movements then walk
+ * quantities around: used at a site, moved to another job, returned to the
+ * vendor. That is why leftovers can be re-used elsewhere without inventing a
+ * second purchase — the quantity travels, the money stays where it was spent.
+ *
+ * Lines recorded before movements existed carry their old single `usedQty`
+ * instead. The server backfills those into real movements on first boot; this
+ * fallback covers the local-only mode, which has no server to do it.
+ */
+export function materialPosition(state, expense) {
+  const moves = (state.movements ?? []).filter((m) => m.expenseId === expense.id)
+  const qty = Number(expense.qty) || 0
+
+  if (moves.length === 0) {
+    const used = Math.min(Number(expense.usedQty) || 0, qty)
+    return {
+      moves: [],
+      used,
+      movedOut: 0,
+      movedIn: 0,
+      returned: 0,
+      leftAtOrigin: qty - used,
+      byProject: { [expense.projectId]: qty - used },
+    }
+  }
+
+  const total = (type, pick) => sum(moves.filter((m) => m.type === type), pick)
+
+  const used = total('used', (m) => m.qty)
+  const returned = total('returned', (m) => m.qty)
+  const movedOut = sum(
+    moves.filter((m) => m.type === 'moved' && m.fromProjectId === expense.projectId),
+    (m) => m.qty,
+  )
+
+  // Everything is tracked per project, so material sent to another job shows up
+  // as stock there rather than vanishing.
+  const byProject = {}
+  byProject[expense.projectId] = qty
+
+  for (const m of moves) {
+    const amount = Number(m.qty) || 0
+    if (m.type === 'moved') {
+      byProject[m.fromProjectId] = (byProject[m.fromProjectId] ?? 0) - amount
+      if (m.toProjectId) byProject[m.toProjectId] = (byProject[m.toProjectId] ?? 0) + amount
+    } else {
+      // used or returned: leaves the pool from wherever it was
+      byProject[m.fromProjectId] = (byProject[m.fromProjectId] ?? 0) - amount
+    }
+  }
+
+  return {
+    moves,
+    used,
+    returned,
+    movedOut,
+    movedIn: 0,
+    leftAtOrigin: byProject[expense.projectId] ?? 0,
+    byProject,
+  }
+}
+
+/**
+ * Inventory Left = what was bought minus what has left the pool, for the heads
  * flagged `tracksInventory`. Value is carried at the purchase rate, so it can
  * be moved to another project instead of written off.
  */
@@ -167,13 +232,22 @@ export function inventoryLeft(state, projectId) {
   const tracked = new Set(state.categories.filter((c) => c.tracksInventory).map((c) => c.id))
   const catName = Object.fromEntries(state.categories.map((c) => [c.id, c.name]))
 
-  const lines = byProject(state.expenses, projectId)
+  // Every stock-tracked purchase, wherever its material was bought for, because
+  // a line bought for one job can now be holding stock at another.
+  const lines = state.expenses
     .filter((e) => tracked.has(e.categoryId))
     .map((e) => {
       const qty = Number(e.qty) || 0
-      const used = Math.min(Number(e.usedQty) || 0, qty)
-      const left = qty - used
       const rate = Number(e.rate) || 0
+      const position = materialPosition(state, e)
+
+      // Looking at one project asks what is standing there; looking at
+      // everything asks what is still ours anywhere.
+      const left =
+        projectId === 'all' || !projectId
+          ? Object.values(position.byProject).reduce((t, n) => t + n, 0)
+          : (position.byProject[projectId] ?? 0)
+
       return {
         id: e.id,
         projectId: e.projectId,
@@ -183,16 +257,82 @@ export function inventoryLeft(state, projectId) {
         vendor: e.vendor,
         unit: e.unit,
         qty,
-        used,
+        used: position.used,
+        movedOut: position.movedOut,
+        returned: position.returned,
         left,
+        // Where this material is sitting right now, for the origin project to
+        // show that some of it went elsewhere.
+        byProject: position.byProject,
         rate,
         value: left * rate,
-        consumedPct: qty > 0 ? used / qty : 0,
+        consumedPct: qty > 0 ? position.used / qty : 0,
       }
     })
+    // A line only belongs to a project view if something of it is standing
+    // there, or it was bought there in the first place.
+    .filter((l) =>
+      projectId === 'all' || !projectId ? true : l.projectId === projectId || (l.byProject[projectId] ?? 0) > 0,
+    )
     .sort((a, b) => b.value - a.value)
 
   return { lines, totalValue: sum(lines, (l) => l.value) }
+}
+
+/**
+ * What a purchase line still has outstanding, for the procurement screen.
+ * Money never appears here — this is the view a procurement account gets.
+ */
+export function outstandingMaterial(state, projectId) {
+  const tracked = new Set(state.categories.filter((c) => c.tracksInventory).map((c) => c.id))
+  const catName = Object.fromEntries(state.categories.map((c) => [c.id, c.name]))
+  const projectName = Object.fromEntries(state.projects.map((p) => [p.id, p.name]))
+
+  const lines = state.expenses
+    .filter((e) => tracked.has(e.categoryId))
+    .flatMap((e) => {
+      const position = materialPosition(state, e)
+
+      // One row per place this material is standing, so moved stock shows up
+      // under the job it was sent to.
+      return Object.entries(position.byProject)
+        .filter(([, qty]) => qty > 0.0001)
+        .map(([holdingProjectId, left]) => ({
+          key: `${e.id}:${holdingProjectId}`,
+          expenseId: e.id,
+          projectId: holdingProjectId,
+          projectName: projectName[holdingProjectId] ?? 'Unknown project',
+          boughtFor: e.projectId,
+          isElsewhere: holdingProjectId !== e.projectId,
+          date: e.date,
+          category: catName[e.categoryId] ?? '—',
+          description: e.description || e.vendor,
+          vendor: e.vendor,
+          unit: e.unit,
+          qty: Number(e.qty) || 0,
+          used: position.used,
+          left,
+        }))
+    })
+    .filter((l) => (projectId === 'all' || !projectId ? true : l.projectId === projectId))
+    .sort((a, b) => (a.projectName === b.projectName ? b.left - a.left : a.projectName.localeCompare(b.projectName)))
+
+  return { lines, totalLeft: sum(lines, (l) => l.left) }
+}
+
+/** Every movement against one purchase line, newest first, with names filled in. */
+export function movementHistory(state, expenseId) {
+  const projectName = Object.fromEntries(state.projects.map((p) => [p.id, p.name]))
+
+  return (state.movements ?? [])
+    .filter((m) => m.expenseId === expenseId)
+    .map((m) => ({
+      ...m,
+      qty: Number(m.qty) || 0,
+      fromName: projectName[m.fromProjectId] ?? '—',
+      toName: m.toProjectId ? (projectName[m.toProjectId] ?? 'Unknown project') : '',
+    }))
+    .sort((a, b) => (a.date === b.date ? b.id.localeCompare(a.id) : b.date.localeCompare(a.date)))
 }
 
 /**

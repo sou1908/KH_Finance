@@ -24,7 +24,7 @@ import { newId } from './ids.js'
  *     rounds wrong is worthless.
  */
 
-export const SCHEMA_VERSION = 5
+export const SCHEMA_VERSION = 6
 
 export const SCHEMA = {
   app_meta: {
@@ -203,6 +203,47 @@ export const SCHEMA = {
   },
 
   /**
+   * What happened to the material after it was bought.
+   *
+   * "Used on site" was a single number on the purchase line, overwritten each
+   * time. That cannot say when thirty sheets went to site, who said so, or what
+   * happened to the twenty left — and two people editing it clobber each other
+   * silently. Each movement is a row instead, so the line carries a history.
+   *
+   * A movement always points at the purchase line the material came from, and
+   * says where it was at the time. Leftovers can therefore move to another job
+   * without inventing a second purchase: the quantity walks, the purchase stays
+   * where the money was spent.
+   *
+   *   used     installed at from_project_id
+   *   moved    from_project_id → to_project_id
+   *   returned went back to the vendor
+   */
+  movements: {
+    columns: {
+      id: 'VARCHAR(40) NOT NULL',
+      expense_id: 'VARCHAR(40) NOT NULL',
+      type: "VARCHAR(20) NOT NULL DEFAULT 'used'",
+      qty: 'DECIMAL(14,3) NOT NULL DEFAULT 0',
+      from_project_id: 'VARCHAR(40) NULL',
+      to_project_id: 'VARCHAR(40) NULL',
+      date: 'DATE NULL',
+      note: 'TEXT NULL',
+      // Who recorded it. The point of the log, for anyone asking later.
+      user_id: 'VARCHAR(40) NULL',
+      updated_at: 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP',
+      deleted_at: 'DATETIME NULL',
+    },
+    primary: '(id)',
+    keys: [
+      'KEY idx_movements_expense (expense_id)',
+      'KEY idx_movements_from (from_project_id, date)',
+      'KEY idx_movements_to (to_project_id)',
+      'KEY idx_movements_live (deleted_at)',
+    ],
+  },
+
+  /**
    * Money moved between our own accounts.
    *
    * Deliberately its own table rather than a flag on receipts or expenses: a
@@ -348,6 +389,7 @@ export async function ensureSchema({ force = false } = {}) {
     }
 
     await seedMasters(conn)
+    const backfilled = await backfillMovements(conn)
     const adminCreated = await ensureAdmin(conn)
 
     await conn.execute(
@@ -356,10 +398,45 @@ export async function ensureSchema({ force = false } = {}) {
     )
 
     ensured = true
-    return { ran: true, added, adminCreated }
+    return { ran: true, added, adminCreated, backfilled }
   } finally {
     conn.release()
   }
+}
+
+/**
+ * Turns the old single "used on site" number into the movement log.
+ *
+ * Every purchase line that already records material used gets one opening
+ * movement carrying that quantity, so nothing recorded before the log existed
+ * is lost. Only lines with no movements at all are touched, which makes this
+ * safe to run on every boot: once a line has a history, it is never rewritten.
+ */
+async function backfillMovements(conn) {
+  const [rows] = await conn.query(
+    `SELECT e.id, e.project_id, e.used_qty, e.date
+       FROM expenses e
+       LEFT JOIN movements m ON m.expense_id = e.id
+      WHERE e.deleted_at IS NULL AND e.used_qty > 0 AND m.id IS NULL`,
+  )
+
+  for (const row of rows) {
+    await conn.execute(
+      `INSERT INTO movements (id, expense_id, type, qty, from_project_id, date, note)
+       VALUES (?, ?, 'used', ?, ?, ?, ?)`,
+      [
+        'mov_' + row.id.replace(/^exp_/, '') + '_opening',
+        row.id,
+        row.used_qty,
+        row.project_id,
+        row.date,
+        'Recorded before deployments were tracked separately',
+      ],
+    )
+  }
+
+  if (rows.length) console.log(`[kalope] carried ${rows.length} used-on-site figure(s) into the movement log`)
+  return rows.length
 }
 
 /** INSERT IGNORE, so a firm that renamed or deleted a head keeps its changes. */
