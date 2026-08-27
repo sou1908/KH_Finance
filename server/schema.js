@@ -24,7 +24,7 @@ import { newId } from './ids.js'
  *     rounds wrong is worthless.
  */
 
-export const SCHEMA_VERSION = 4
+export const SCHEMA_VERSION = 5
 
 export const SCHEMA = {
   app_meta: {
@@ -97,6 +97,43 @@ export const SCHEMA = {
     },
     primary: '(id)',
     keys: ['KEY idx_categories_live (deleted_at)'],
+  },
+
+  /** Shops and contractors, so a vendor name is picked rather than retyped. */
+  vendors: {
+    columns: {
+      id: 'VARCHAR(40) NOT NULL',
+      name: 'VARCHAR(190) NOT NULL',
+      phone: "VARCHAR(40) NOT NULL DEFAULT ''",
+      note: 'TEXT NULL',
+      updated_at: 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP',
+      deleted_at: 'DATETIME NULL',
+    },
+    primary: '(id)',
+    keys: ['KEY idx_vendors_live (deleted_at)'],
+  },
+
+  /**
+   * The things you buy, each under one head.
+   *
+   * A bill still stores the item's name as its own description rather than a
+   * reference. Renaming an item later must not silently rewrite what a bill
+   * from last March said was bought — the bill is the record, the list is only
+   * how it gets typed.
+   */
+  items: {
+    columns: {
+      id: 'VARCHAR(40) NOT NULL',
+      category_id: 'VARCHAR(40) NULL',
+      name: 'VARCHAR(190) NOT NULL',
+      unit: "VARCHAR(40) NOT NULL DEFAULT ''",
+      rate: 'DECIMAL(14,2) NOT NULL DEFAULT 0',
+      note: 'TEXT NULL',
+      updated_at: 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP',
+      deleted_at: 'DATETIME NULL',
+    },
+    primary: '(id)',
+    keys: ['KEY idx_items_category (category_id)', 'KEY idx_items_live (deleted_at)'],
   },
 
   projects: {

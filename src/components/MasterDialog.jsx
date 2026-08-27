@@ -9,18 +9,36 @@ const DEFAULTS = {
   category: { name: '', unit: '', tracksInventory: false },
   account: { name: '', kind: ACCOUNT_KINDS.CASH, holder: '', openingBalance: 0 },
   client: { name: '', phone: '', note: '' },
+  vendor: { name: '', phone: '', note: '' },
+  item: { name: '', categoryId: '', unit: '', rate: '', note: '' },
 }
 
-const ENTITY = { category: 'categories', account: 'accounts', client: 'clients' }
-const NOUN = { category: 'head', account: 'account', client: 'client' }
+const ENTITY = {
+  category: 'categories',
+  account: 'accounts',
+  client: 'clients',
+  vendor: 'vendors',
+  item: 'items',
+}
+
+const NOUN = {
+  category: 'head',
+  account: 'account',
+  client: 'client',
+  vendor: 'vendor',
+  item: 'item',
+}
 
 /**
- * Edits the three master lists. Shared by Settings and the Accounts page so
- * there is exactly one form per record type, not one per screen.
+ * Edits every master list. Shared by Settings and the Accounts page so there is
+ * exactly one form per record type, not one per screen.
+ *
+ * `presets` seeds a new record — the Items panel passes the head that is
+ * currently selected, so adding an item under it needs no extra choosing.
  */
-export default function MasterDialog({ kind, row, onClose }) {
-  const { add, update, accounts } = useApp()
-  const [form, setForm] = useState(row ?? DEFAULTS[kind])
+export default function MasterDialog({ kind, row, presets, onClose }) {
+  const { add, update, accounts, categories } = useApp()
+  const [form, setForm] = useState(row ?? { ...DEFAULTS[kind], ...presets })
   const [error, setError] = useState('')
 
   const entity = ENTITY[kind]
@@ -38,9 +56,15 @@ export default function MasterDialog({ kind, row, onClose }) {
     if (!String(form.name).trim()) return setError(`Give the ${noun} a name.`)
 
     const record = { ...form, name: String(form.name).trim() }
+
     if (kind === 'account') {
       record.openingBalance = Number(form.openingBalance) || 0
       record.kind = String(form.kind || 'cash').trim().toLowerCase()
+    }
+
+    if (kind === 'item') {
+      if (!form.categoryId) return setError('Pick the head this item belongs to.')
+      record.rate = Number(form.rate) || 0
     }
 
     if (row) update(entity, record)
@@ -126,15 +150,54 @@ export default function MasterDialog({ kind, row, onClose }) {
           </>
         )}
 
-        {kind === 'client' && (
+        {(kind === 'client' || kind === 'vendor') && (
           <div className="field-row">
             <Field label="Phone">
-              <input value={form.phone} onChange={set('phone')} />
+              <input type="tel" inputMode="tel" value={form.phone} onChange={set('phone')} />
             </Field>
             <Field label="Note">
-              <input value={form.note} onChange={set('note')} placeholder="Address, referral, anything" />
+              <input
+                value={form.note}
+                onChange={set('note')}
+                placeholder={kind === 'vendor' ? 'Shop address, contact person' : 'Address, referral, anything'}
+              />
             </Field>
           </div>
+        )}
+
+        {kind === 'item' && (
+          <>
+            <Field label="Head" hint="Which head this item is bought under">
+              <select value={form.categoryId} onChange={set('categoryId')}>
+                <option value="">Select head</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+
+            <div className="field-row">
+              <Field label="Unit" hint="Prefilled when this item is picked on a bill">
+                <UnitSelect value={form.unit} onChange={(unit) => setForm((f) => ({ ...f, unit }))} />
+              </Field>
+              <Field
+                label="Usual rate (₹)"
+                hint={
+                  Number(form.rate)
+                    ? `${money(form.rate)} — a starting point, always editable on the bill`
+                    : 'Optional. Prefilled on a bill, and still editable there.'
+                }
+              >
+                <input type="number" min="0" step="any" value={form.rate} onChange={set('rate')} />
+              </Field>
+            </div>
+
+            <Field label="Note">
+              <input value={form.note} onChange={set('note')} placeholder="Brand, size, specification" />
+            </Field>
+          </>
         )}
       </div>
     </Dialog>

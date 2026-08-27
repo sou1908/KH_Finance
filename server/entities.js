@@ -44,6 +44,20 @@ export const ENTITIES = {
     reference: 'reference',
     note: 'note',
   },
+  vendors: {
+    id: 'id',
+    name: 'name',
+    phone: 'phone',
+    note: 'note',
+  },
+  items: {
+    id: 'id',
+    categoryId: 'category_id',
+    name: 'name',
+    unit: 'unit',
+    rate: 'rate',
+    note: 'note',
+  },
   transfers: {
     id: 'id',
     date: 'date',

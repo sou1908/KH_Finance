@@ -11,6 +11,12 @@ const EMPTY = {
   accounts: [],
   categories: [],
   clients: [],
+  // Shops and contractors you buy from, so the name is picked rather than
+  // retyped — and spelled the same way every time.
+  vendors: [],
+  // The things you buy, each belonging to one head, with the unit and the last
+  // rate you paid.
+  items: [],
   projects: [],
   receipts: [],
   expenses: [],

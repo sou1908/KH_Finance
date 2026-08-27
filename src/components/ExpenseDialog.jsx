@@ -23,6 +23,10 @@ import { money, num, today } from '../lib/format'
 
 // Ids are minted up front so a bill photo attached before the form is submitted
 // already knows which expense it belongs to.
+// Sentinels for the "not on the list" option in each dropdown.
+const NEW_VENDOR = '__new_vendor'
+const NEW_ITEM = '__new_item'
+
 const blankItem = (unit = '') => ({
   id: newId('exp'),
   description: '',
@@ -60,7 +64,7 @@ function itemsFrom(existing) {
 }
 
 export default function ExpenseDialog({ existing, lockedProject, onClose }) {
-  const { projects, accounts, categories, add, update } = useApp()
+  const { projects, accounts, categories, vendors, items: savedItems, add, update } = useApp()
 
   const [bill, setBill] = useState(() => ({
     ...blankBill(lockedProject),
@@ -80,12 +84,56 @@ export default function ExpenseDialog({ existing, lockedProject, onClose }) {
   const [items, setItems] = useState(() => itemsFrom(existing))
   const [error, setError] = useState('')
 
+  // An existing bill may name a vendor that was never added to the list; it
+  // must stay editable rather than being silently blanked.
+  const [typingVendor, setTypingVendor] = useState(
+    () => Boolean(existing?.vendor) && !(vendors ?? []).some((v) => v.name === existing.vendor),
+  )
+
   const category = categories.find((c) => c.id === bill.categoryId)
   const tracksStock = Boolean(category?.tracksInventory)
   const isEdit = Boolean(existing)
 
   // Named rather than hardcoded, since the heads are editable in Settings.
   const stockHeads = categories.filter((c) => c.tracksInventory).map((c) => c.name)
+
+  // The saved items for whichever head is selected.
+  const headItems = (savedItems ?? []).filter((i) => i.categoryId === bill.categoryId)
+
+  /**
+   * Choosing a saved item fills in what is known about it.
+   *
+   * The rate is a starting point, not a rule — prices move, and the bill in
+   * hand is the truth. It only fills a rate that has not been typed, so
+   * changing the item on a line never quietly overwrites a figure read off the
+   * paper.
+   */
+  const pickItem = (index, name) => {
+    if (name === NEW_ITEM) {
+      setItems((list) => list.map((it, i) => (i === index ? { ...it, typing: true, description: '' } : it)))
+      return
+    }
+
+    const saved = headItems.find((i) => i.name === name)
+    setError('')
+
+    setItems((list) =>
+      list.map((it, i) => {
+        if (i !== index) return it
+
+        const next = { ...it, description: name }
+        if (saved) {
+          if (saved.unit) next.unit = saved.unit
+          if (Number(saved.rate) && !Number(it.rate)) next.rate = String(saved.rate)
+
+          const qty = Number(next.qty) || 0
+          const rate = Number(next.rate) || 0
+          if (qty && rate) next.amount = String(Math.round(qty * rate * 100) / 100)
+        }
+        return next
+      }),
+    )
+  }
 
   const total = items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0)
 
@@ -158,8 +206,11 @@ export default function ExpenseDialog({ existing, lockedProject, onClose }) {
 
     const records = items.map((item, index) => {
       const qty = Number(item.qty) || 0
+      // `typing` is form state — which control the row is showing — and has no
+      // business being written to the ledger.
+      const { typing, ...fields } = item
       return {
-        ...item,
+        ...fields,
         projectId: bill.projectId,
         date: bill.date,
         categoryId: bill.categoryId,
@@ -239,8 +290,52 @@ export default function ExpenseDialog({ existing, lockedProject, onClose }) {
         </div>
 
         <div className="field-row three">
-          <Field label="Vendor / paid to">
-            <input value={bill.vendor} onChange={setField('vendor')} placeholder="e.g. Shree Ply Mart" />
+          <Field
+            label="Vendor / paid to"
+            hint={vendors.length === 0 ? 'Save vendors in Settings to pick them here' : undefined}
+          >
+            {typingVendor ? (
+              <div className="unit-custom">
+                <input
+                  value={bill.vendor}
+                  onChange={setField('vendor')}
+                  placeholder="e.g. Shree Ply Mart"
+                  autoFocus
+                />
+                {vendors.length > 0 && (
+                  <button
+                    type="button"
+                    className="btn ghost tiny"
+                    onClick={() => {
+                      setTypingVendor(false)
+                      setBill((b) => ({ ...b, vendor: '' }))
+                    }}
+                  >
+                    Use the list
+                  </button>
+                )}
+              </div>
+            ) : (
+              <select
+                value={bill.vendor}
+                onChange={(e) => {
+                  if (e.target.value === NEW_VENDOR) {
+                    setTypingVendor(true)
+                    setBill((b) => ({ ...b, vendor: '' }))
+                    return
+                  }
+                  setField('vendor')(e)
+                }}
+              >
+                <option value="">Select vendor</option>
+                {vendors.map((v) => (
+                  <option key={v.id} value={v.name}>
+                    {v.name}
+                  </option>
+                ))}
+                <option value={NEW_VENDOR}>+ Someone not on the list…</option>
+              </select>
+            )}
           </Field>
           <Field label="Paid from" hint="Which account the money left">
             <select value={bill.accountId} onChange={setField('accountId')}>
@@ -298,12 +393,46 @@ export default function ExpenseDialog({ existing, lockedProject, onClose }) {
                 </div>
               )}
 
-              <Field label="Description">
-                <input
-                  value={item.description}
-                  onChange={(e) => setItem(index, 'description', e.target.value)}
-                  placeholder="e.g. 19mm BWP plywood"
-                />
+              <Field
+                label="Description"
+                hint={
+                  bill.categoryId && headItems.length === 0
+                    ? `No items saved under ${category?.name}. Add them in Settings and they appear here.`
+                    : undefined
+                }
+              >
+                {/* Picked from the head's saved items, so the same thing is
+                    named the same way every time — which is what lets the stock
+                    pool add it up. Free text stays available for a one-off. */}
+                {item.typing || headItems.length === 0 ? (
+                  <div className="unit-custom">
+                    <input
+                      value={item.description}
+                      onChange={(e) => setItem(index, 'description', e.target.value)}
+                      placeholder="e.g. 19mm BWP plywood"
+                    />
+                    {headItems.length > 0 && (
+                      <button
+                        type="button"
+                        className="btn ghost tiny"
+                        onClick={() => setItems((l) => l.map((it, i) => (i === index ? { ...it, typing: false, description: '' } : it)))}
+                      >
+                        Use the list
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <select value={item.description} onChange={(e) => pickItem(index, e.target.value)}>
+                    <option value="">Select an item</option>
+                    {headItems.map((saved) => (
+                      <option key={saved.id} value={saved.name}>
+                        {saved.name}
+                        {Number(saved.rate) ? ` — ${money(saved.rate)}/${saved.unit || 'unit'}` : ''}
+                      </option>
+                    ))}
+                    <option value={NEW_ITEM}>+ Something not on the list…</option>
+                  </select>
+                )}
               </Field>
 
               <div className="field-row four">
