@@ -233,8 +233,12 @@ function LinesView({ state, scope, scopedToProject, showUsedUp, setShowUsedUp, s
   const { lines, totalValue } = inventoryLeft(state, scope)
   const visible = showUsedUp ? lines : lines.filter((l) => l.left > 0)
 
-  const bought = lines.reduce((t, l) => t + l.qty * l.rate, 0)
-  const consumed = lines.reduce((t, l) => t + l.used * l.rate, 0)
+  // Under a project scope the list also carries lines bought elsewhere that are
+  // now standing here, so "bought" has to count only what this job itself paid
+  // for — otherwise another job's purchase reads as this one's spend.
+  const ownLines = scopedToProject ? lines.filter((l) => l.projectId === scope) : lines
+  const bought = ownLines.reduce((t, l) => t + l.qty * l.rate, 0)
+  const consumed = ownLines.reduce((t, l) => t + l.used * l.rate, 0)
 
   const exportRows = () => {
     const csv = toCSV(visible, [
@@ -266,7 +270,14 @@ function LinesView({ state, scope, scopedToProject, showUsedUp, setShowUsedUp, s
       </div>
 
       <div className="grid cols-3">
-        <Measure label="Material bought" value={bought} tone="out" foot={`${lines.length} stock-tracked purchase lines`} />
+        <Measure
+          label="Material bought"
+          value={bought}
+          tone="out"
+          foot={`${ownLines.length} stock-tracked purchase line${ownLines.length === 1 ? '' : 's'}${
+            scopedToProject ? ' bought for this job' : ''
+          }`}
+        />
         <Measure
           label="Consumed on site"
           value={consumed}

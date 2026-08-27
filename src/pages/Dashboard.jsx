@@ -101,6 +101,20 @@ export default function Dashboard() {
             />
           </div>
         )}
+
+        {/* Both figures above are struck against consumed cost, not the billed
+            total shown at the top, so say so rather than let the two disagree
+            silently. */}
+        {totals.quoted > 0 && totals.hasTransfers && (
+          <p className="note" style={{ marginTop: 14 }}>
+            These two use {money(totals.netCost)} — what this job consumed — rather than the {money(totals.expenditure)}{' '}
+            billed to it, because{' '}
+            {totals.materialOut > 0 && `${money(totals.materialOut)} of material went to other jobs`}
+            {totals.materialOut > 0 && totals.materialIn > 0 && ' and '}
+            {totals.materialIn > 0 && `${money(totals.materialIn)} came in from other jobs`}. The full working is on the{' '}
+            <Link to={`/projects/${scope}`}>project page</Link>.
+          </p>
+        )}
       </Panel>
 
       <div className="grid split">

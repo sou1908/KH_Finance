@@ -12,6 +12,39 @@ export function byProject(rows, projectId) {
  * money received minus money spent. Negative means the project is running on
  * the firm's own money and needs a payment call.
  */
+/**
+ * What material moving between jobs is worth, valued at what was paid for it.
+ *
+ * The bill is never rewritten: 50 sheets for 157,500 stays 50 sheets for
+ * 157,500, because that is what the paper in the file says and rewriting it is
+ * exactly what compliance asks you not to do. The correction sits alongside it
+ * as a derived figure instead — nothing negative in the ledger, nothing to
+ * reconcile by hand.
+ *
+ * A movement is valued at the rate of the purchase it came from, even after it
+ * has been moved twice, because that is the money that actually left.
+ */
+export function materialTransfers(state, projectId) {
+  const rateFor = Object.fromEntries(state.expenses.map((e) => [e.id, Number(e.rate) || 0]))
+
+  const moves = (state.movements ?? []).filter((m) => m.type === 'moved')
+  const value = (m) => (Number(m.qty) || 0) * (rateFor[m.expenseId] ?? 0)
+
+  if (projectId === 'all' || !projectId) {
+    // Across everything, what leaves one job arrives at another, so it nets to
+    // zero and the firm's total spend is unchanged.
+    return { out: 0, in: 0, net: 0, movedOut: [], movedIn: [] }
+  }
+
+  const movedOut = moves.filter((m) => m.fromProjectId === projectId)
+  const movedIn = moves.filter((m) => m.toProjectId === projectId)
+
+  const out = sum(movedOut, value)
+  const into = sum(movedIn, value)
+
+  return { out, in: into, net: into - out, movedOut, movedIn }
+}
+
 export function projectTotals(state, projectId) {
   const receipts = byProject(state.receipts, projectId)
   const expenses = byProject(state.expenses, projectId)
@@ -23,18 +56,36 @@ export function projectTotals(state, projectId) {
   const projects = projectId === 'all' ? state.projects : state.projects.filter((p) => p.id === projectId)
   const quoted = sum(projects, (p) => p.quotedAmount)
 
+  // Material bought on this job and sent elsewhere was never consumed here;
+  // material received from another job was. Adding the two to what was billed
+  // gives what the job really cost.
+  const transfers = materialTransfers(state, projectId)
+  const netCost = expenditure + transfers.net
+
   return {
     incoming,
+    // As billed. Ties to the paper, and is never adjusted.
     expenditure,
     remaining,
     quoted,
+
+    // The allocation layer, kept separate so both figures stay visible.
+    materialOut: transfers.out,
+    materialIn: transfers.in,
+    materialNet: transfers.net,
+    hasTransfers: transfers.out > 0 || transfers.in > 0,
+    // What this job actually consumed.
+    netCost,
+
     // How much of the quote is still uninvoiced/uncollected.
     pendingFromClient: Math.max(quoted - incoming, 0),
     // Share of received money already spent — drives the caliper scale.
     burnRatio: incoming > 0 ? expenditure / incoming : 0,
-    // Share of the quote spent — the real margin warning.
-    quoteRatio: quoted > 0 ? expenditure / quoted : 0,
-    margin: quoted - expenditure,
+    // Measured against what the job consumed, not what was billed to it, or a
+    // job that lent out material would look worse than it performed.
+    quoteRatio: quoted > 0 ? netCost / quoted : 0,
+    margin: quoted - netCost,
+
     receiptCount: receipts.length,
     expenseCount: expenses.length,
   }

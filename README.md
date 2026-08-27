@@ -7,7 +7,9 @@ npm install
 npm run dev        # app only, no database — http://localhost:5173
 npm run build      # bundle into dist/
 npm start          # app + API on one port — http://localhost:3000
-npm run test:e2e   # 32 API checks against a throwaway database
+npm run test:e2e        # 32 API checks against a throwaway database
+npm run test:roles      # what a procurement login is and isn't sent
+npm run test:selectors  # money arithmetic — no database needed
 ```
 
 ## One deployment, two halves
@@ -50,11 +52,34 @@ All arithmetic lives in one file: [`src/store/selectors.js`](src/store/selectors
 Components read totals; they never compute them. If a figure is ever disputed,
 that's the only file to audit.
 
+- **Expenditure** = the sum of the bills, exactly as recorded. It is never
+  adjusted, because it has to keep matching the paper in the file.
 - **Remaining** = incoming − expenditure. Negative means the firm is funding the
   job out of its own pocket, and the dashboard says so.
-- **Margin** = quoted − expenditure. This is the number that decides whether the
+- **Net cost** = expenditure − material sent to other jobs + material received
+  from them, each valued at the rate on the original purchase.
+- **Margin** = quoted − **net cost**. This is the number that decides whether the
   job was worth taking; "remaining" only tracks cash position.
-- **Inventory left** = (qty − usedQty) × rate, for stock-tracked heads.
+- **Inventory left** = what a purchase still has standing, per project, from the
+  `movements` ledger × the purchase rate.
+
+### Why cost follows the material
+
+Twenty sheets bought for Kothari and moved to Vaidya were paid for by Kothari,
+but consumed by Vaidya. Left alone, Kothari's margin reads worse than it was and
+Vaidya's better.
+
+Two things could fix that, and only one of them is safe. Rewriting the bills —
+shrinking Kothari's and inventing one for Vaidya — makes every head total,
+percentage and inventory figure stop agreeing with the vendor's paperwork, which
+is the one thing compliance actually asks you to preserve. So the bills stay
+untouched and the adjustment is *derived*: `materialTransfers()` values each
+`moved` movement at its original purchase rate and `projectTotals()` reports
+both figures side by side. The project page shows the bridge between them.
+
+The invariant, asserted in `npm run test:selectors`: **billed and consumed must
+total the same across all projects.** Moving material between jobs relocates
+cost; it can never create or destroy any.
 
 ## Architecture
 

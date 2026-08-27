@@ -863,6 +863,40 @@ table.data .amount {
 
 .attach-card .cap { padding: 7px 9px; font-size: 11.5px; }
 
+/* ------------------------------------------------------------ cost bridge */
+/* Billed → adjustments → consumed, laid out so the arithmetic reads down the
+   column and the correction is never mistaken for a rewritten figure. */
+
+.cost-bridge {
+  margin-top: 20px;
+  padding: 16px 18px;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+}
+
+.cost-bridge dl { margin: 10px 0 0; display: flex; flex-direction: column; gap: 7px; }
+
+.cost-bridge dl > div {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  font-size: 13.5px;
+}
+
+.cost-bridge dt { color: var(--ink-2); }
+.cost-bridge dd { margin: 0 0 0 auto; font-size: 14px; white-space: nowrap; }
+
+.cost-bridge-total {
+  border-top: 1px solid var(--rule);
+  padding-top: 8px;
+  margin-top: 2px;
+  font-weight: 600;
+}
+
+.cost-bridge-total dt { color: var(--ink); }
+.cost-bridge-total dd { font-size: 16px; }
+
 /* ---------------------------------------------------------------- transfer */
 
 /* From → To reads as a route, not two unrelated dropdowns. */

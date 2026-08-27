@@ -79,6 +79,12 @@ export default function ProjectDetail() {
   const isDone = project.status === 'Completed'
   const leftovers = stock.lines.filter((l) => l.left > 0)
 
+  // Stock standing here that was bought against another job. Its bought/used
+  // figures belong to that job, so showing them here would misread as this
+  // job's own purchase.
+  const nameOf = (pid) => state.projects.find((p) => p.id === pid)?.name
+  const cameFrom = (line) => (line.projectId === id ? null : nameOf(line.projectId))
+
   const reopen = () => state.update('projects', { ...project, status: 'Active' })
 
   /**
@@ -195,6 +201,41 @@ export default function ProjectDetail() {
               />
             </div>
           )}
+
+          {/* Shown in full rather than folded silently into one figure: the
+              bill stays what the bill says, and the correction is visible
+              beside it so nobody wonders where a number went. */}
+          {totals.hasTransfers && (
+            <div className="cost-bridge">
+              <span className="eyebrow">What this job actually cost</span>
+              <dl>
+                <div>
+                  <dt>Billed to this job</dt>
+                  <dd className="figure">{money(totals.expenditure)}</dd>
+                </div>
+                {totals.materialOut > 0 && (
+                  <div>
+                    <dt>Material sent to other jobs</dt>
+                    <dd className="figure neg">− {money(totals.materialOut)}</dd>
+                  </div>
+                )}
+                {totals.materialIn > 0 && (
+                  <div>
+                    <dt>Material received from other jobs</dt>
+                    <dd className="figure pos">+ {money(totals.materialIn)}</dd>
+                  </div>
+                )}
+                <div className="cost-bridge-total">
+                  <dt>Consumed by this job</dt>
+                  <dd className="figure">{money(totals.netCost)}</dd>
+                </div>
+              </dl>
+              <p className="note" style={{ margin: '10px 0 0' }}>
+                Bills are never rewritten — they match the paper in your file. Material moved between jobs is
+                valued at what you paid for it, and the margin above uses this figure rather than the billed one.
+              </p>
+            </div>
+          )}
           {project.note && <p className="note" style={{ marginBottom: 0, marginTop: 18 }}>{project.note}</p>}
         </Panel>
 
@@ -235,7 +276,7 @@ export default function ProjectDetail() {
             >
               {leftovers.length === 0 ? (
                 <Empty title="Nothing left over">
-                  Every stock-tracked item bought for this job has been used.
+                  Every stock-tracked item bought for this job has been used, moved to another job, or returned.
                 </Empty>
               ) : (
                 <>
@@ -265,7 +306,9 @@ export default function ProjectDetail() {
                             <td>
                               {l.description || l.vendor}
                               <span className="sub-line">
-                                {l.category} · bought {num(l.qty)} {l.unit}, used {num(l.used)}
+                                {cameFrom(l)
+                                  ? `${l.category} · moved here from ${cameFrom(l)}`
+                                  : `${l.category} · bought ${num(l.qty)} ${l.unit}, used ${num(l.used)}`}
                               </span>
                             </td>
                             <td className="amount" style={{ fontWeight: 600 }}>
