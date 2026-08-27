@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import Panel, { Empty } from '../components/Panel'
 import MasterDialog from '../components/MasterDialog'
-import { useApp } from '../store/AppStore'
+import { ENTITIES, WITH_FILES, useApp } from '../store/AppStore'
 import { getFile, humanSize, putFile, storageEstimate } from '../data/files'
 import { money } from '../lib/format'
 
@@ -21,12 +21,6 @@ export default function Settings() {
     storageEstimate().then(setUsage).catch(() => {})
   }, [state.expenses, state.receipts])
 
-// Everything a backup must carry. Listed once, so adding an entity later
-// cannot leave it silently missing from every backup taken afterwards.
-const BACKED_UP = ['accounts', 'categories', 'clients', 'vendors', 'items', 'projects', 'receipts', 'expenses', 'transfers']
-
-// The rows that can hold a file.
-const WITH_FILES = ['projects', 'receipts', 'expenses', 'transfers']
 
   const allAttachments = WITH_FILES.flatMap((entity) =>
     (state[entity] ?? []).flatMap((row) => row.attachments ?? []),
@@ -55,7 +49,9 @@ const WITH_FILES = ['projects', 'receipts', 'expenses', 'transfers']
         format: 'kalope-backup',
         version: 2,
         exportedAt: new Date().toISOString(),
-        ...Object.fromEntries(BACKED_UP.map((entity) => [entity, state[entity] ?? []])),
+        // Driven off the store's own entity list, so a backup cannot quietly omit
+        // something added later.
+        ...Object.fromEntries(ENTITIES.map((entity) => [entity, state[entity] ?? []])),
         files,
       }
 
@@ -161,6 +157,11 @@ const WITH_FILES = ['projects', 'receipts', 'expenses', 'transfers']
               <tbody>
                 {state.categories.map((c) => {
                   const count = state.expenses.filter((e) => e.categoryId === c.id).length
+                  // Items belong to a head. Deleting the head would strand them
+                  // where no screen can reach them, since the Items panel only
+                  // ever lists a head that still exists.
+                  const itemCount = state.items.filter((i) => i.categoryId === c.id).length
+                  const blockedBy = count > 0 ? 'bills' : itemCount > 0 ? 'items' : null
                   return (
                     <tr key={c.id}>
                       <td style={{ fontWeight: 500 }}>{c.name}</td>
@@ -180,8 +181,14 @@ const WITH_FILES = ['projects', 'receipts', 'expenses', 'transfers']
                           </button>
                           <button
                             className="btn ghost tiny danger"
-                            disabled={count > 0}
-                            title={count > 0 ? 'Reassign its bills before deleting' : ''}
+                            disabled={Boolean(blockedBy)}
+                            title={
+                              blockedBy === 'bills'
+                                ? `${count} bill${count === 1 ? '' : 's'} are filed under this head. Reassign them first.`
+                                : blockedBy === 'items'
+                                  ? `${itemCount} item${itemCount === 1 ? '' : 's'} belong to this head. Remove them first.`
+                                  : 'Remove this head'
+                            }
                             onClick={() => state.remove('categories', c.id)}
                           >
                             Delete

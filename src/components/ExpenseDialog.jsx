@@ -101,6 +101,21 @@ export default function ExpenseDialog({ existing, lockedProject, onClose }) {
   const headItems = (savedItems ?? []).filter((i) => i.categoryId === bill.categoryId)
 
   /**
+   * Whether a line shows a text box rather than the dropdown.
+   *
+   * Decided per render rather than held in state, because a description can
+   * stop matching the list without anything being typed: editing a bill from
+   * before the list existed, or switching the head after picking an item. A
+   * select whose value is not among its options renders blank — the text is
+   * still there and still saves, but it is invisible and cannot be corrected,
+   * which is the worst of both.
+   */
+  const showsTextFor = (item) =>
+    Boolean(item.typing) ||
+    headItems.length === 0 ||
+    (Boolean(item.description) && !headItems.some((saved) => saved.name === item.description))
+
+  /**
    * Choosing a saved item fills in what is known about it.
    *
    * The rate is a starting point, not a rule — prices move, and the bill in
@@ -122,14 +137,21 @@ export default function ExpenseDialog({ existing, lockedProject, onClose }) {
         if (i !== index) return it
 
         const next = { ...it, description: name }
-        if (saved) {
-          if (saved.unit) next.unit = saved.unit
-          if (Number(saved.rate) && !Number(it.rate)) next.rate = String(saved.rate)
+        if (!saved) return next
 
+        if (saved.unit) next.unit = saved.unit
+
+        // Only fill a rate that has not been entered, and only recompute the
+        // amount when this actually supplied the rate. Recomputing regardless
+        // would undo a discount typed straight into the amount box — the one
+        // figure on the line that was read off the paper.
+        const fillsRate = Number(saved.rate) > 0 && !Number(it.rate)
+        if (fillsRate) {
+          next.rate = String(saved.rate)
           const qty = Number(next.qty) || 0
-          const rate = Number(next.rate) || 0
-          if (qty && rate) next.amount = String(Math.round(qty * rate * 100) / 100)
+          if (qty) next.amount = String(Math.round(qty * Number(saved.rate) * 100) / 100)
         }
+
         return next
       }),
     )
@@ -294,7 +316,10 @@ export default function ExpenseDialog({ existing, lockedProject, onClose }) {
             label="Vendor / paid to"
             hint={vendors.length === 0 ? 'Save vendors in Settings to pick them here' : undefined}
           >
-            {typingVendor ? (
+            {/* Falls back to a text box when there is no list to pick from, so
+                a fresh install does not make you visit Settings before you can
+                record your first bill. Same rule as the description field. */}
+            {typingVendor || vendors.length === 0 ? (
               <div className="unit-custom">
                 <input
                   value={bill.vendor}
@@ -404,7 +429,7 @@ export default function ExpenseDialog({ existing, lockedProject, onClose }) {
                 {/* Picked from the head's saved items, so the same thing is
                     named the same way every time — which is what lets the stock
                     pool add it up. Free text stays available for a one-off. */}
-                {item.typing || headItems.length === 0 ? (
+                {showsTextFor(item) ? (
                   <div className="unit-custom">
                     <input
                       value={item.description}

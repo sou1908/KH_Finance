@@ -24,6 +24,18 @@ const EMPTY = {
   transfers: [],
 }
 
+/**
+ * Every entity, in the order a backup should carry them.
+ *
+ * Declared beside EMPTY so adding one is a single edit. Listing entities by
+ * hand in each place that walks them is how `transfers` went missing from
+ * every backup taken between it shipping and this being noticed.
+ */
+export const ENTITIES = Object.keys(EMPTY)
+
+/** The rows that can hold an attached file. */
+export const WITH_FILES = ['projects', 'receipts', 'expenses', 'transfers']
+
 function reducer(state, action) {
   const { type, entity, payload } = action
 
@@ -74,7 +86,14 @@ function reducer(state, action) {
  */
 function init() {
   const cached = load()
-  if (cached) return cached
+
+  // Merged over EMPTY, never returned raw. A cache written before an entity
+  // existed has no key for it, so `state.vendors.length` throws for every user
+  // who already had a ledger — a crash that only ever hits real installs and
+  // never a fresh one. Spreading EMPTY first makes every future entity arrive
+  // as an empty list instead of undefined.
+  if (cached) return { ...EMPTY, ...cached }
+
   if (isCloud()) return EMPTY
   return { ...EMPTY, accounts: DEFAULT_ACCOUNTS, categories: DEFAULT_CATEGORIES }
 }
@@ -160,7 +179,9 @@ export function AppProvider({ children }) {
 
       clearAll: () => {
         const s = latest.current
-        dropFilesFor([...s.projects, ...s.receipts, ...s.expenses])
+        // Every kind of row that can hold a file. Missing one leaves its blobs
+        // in IndexedDB with nothing left pointing at them.
+        dropFilesFor(WITH_FILES.flatMap((entity) => s[entity] ?? []))
         commit({ type: 'replaceAll', payload: EMPTY }, { type: 'replaceAll', entity: 'all', payload: EMPTY })
       },
 
