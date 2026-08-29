@@ -40,9 +40,22 @@ export const PROCUREMENT_FIELDS = {
   projects: ['id', 'name', 'site', 'status', 'startDate'],
   categories: ['id', 'name', 'unit', 'tracksInventory', 'kind'],
   items: ['id', 'categoryId', 'name', 'unit'],
-  vendors: ['id', 'name', 'phone'],
+  vendors: ['id', 'name', 'phone', 'kind'],
   expenses: ['id', 'projectId', 'date', 'categoryId', 'vendor', 'description', 'qty', 'unit', 'usedQty'],
   movements: ['id', 'expenseId', 'type', 'qty', 'fromProjectId', 'toProjectId', 'date', 'note', 'userId'],
+}
+
+/**
+ * Rows procurement is not sent at all, on entities they do otherwise receive.
+ *
+ * Field filtering alone is not enough here: `categories` and `vendors` carry
+ * both sides of the business, and a procurement account has no business knowing
+ * the landlord's name or that "Marketing & ads" is a head. Anything without a
+ * rule here is sent whole.
+ */
+const PROCUREMENT_ROWS = {
+  categories: (row) => (row.kind || 'project') === 'project',
+  vendors: (row) => (row.kind || 'project') === 'project',
 }
 
 /** Which entities a role may write, and which operations it may use. */
@@ -65,9 +78,10 @@ export function filterStateFor(user, state) {
   const out = {}
 
   for (const [entity, fields] of Object.entries(allowed)) {
-    out[entity] = (state[entity] ?? []).map((row) =>
-      Object.fromEntries(fields.filter((f) => f in row).map((f) => [f, row[f]])),
-    )
+    const keep = PROCUREMENT_ROWS[entity]
+    out[entity] = (state[entity] ?? [])
+      .filter((row) => (keep ? keep(row) : true))
+      .map((row) => Object.fromEntries(fields.filter((f) => f in row).map((f) => [f, row[f]])))
   }
 
   return out

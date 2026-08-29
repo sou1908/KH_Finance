@@ -3,7 +3,7 @@ import Dialog, { Field } from './Dialog'
 import Attachments from './Attachments'
 import { useApp } from '../store/AppStore'
 import { newId } from '../data/repo'
-import { headsOfKind } from '../store/selectors'
+import { headsOfKind, vendorsOfKind } from '../store/selectors'
 import { money, today } from '../lib/format'
 
 /**
@@ -37,18 +37,21 @@ const blank = () => ({
 
 export default function CompanyExpenseDialog({ existing, onClose }) {
   const state = useApp()
-  const { accounts, offices, vendors, add, update } = state
+  const { accounts, offices, add, update } = state
 
   const [form, setForm] = useState(() => (existing ? { ...blank(), ...existing } : blank()))
   const [error, setError] = useState('')
 
+  const heads = headsOfKind(state, 'company')
+  // Landlords, the power company, agencies — kept apart from the shops and
+  // contractors, so neither list clutters the other's form.
+  const vendors = vendorsOfKind(state, 'company')
+
   // A bill already on file may name a vendor that was never saved to the list.
   // It has to stay editable rather than being silently blanked on save.
   const [typingVendor, setTypingVendor] = useState(
-    () => Boolean(existing?.vendor) && !(vendors ?? []).some((v) => v.name === existing.vendor),
+    () => Boolean(existing?.vendor) && !vendors.some((v) => v.name === existing.vendor),
   )
-
-  const heads = headsOfKind(state, 'company')
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }))
 
   const pickVendor = (e) => {
@@ -143,11 +146,11 @@ export default function CompanyExpenseDialog({ existing, onClose }) {
         </div>
 
         <Field label="Paid to" hint="The landlord, the power company, the agency">
-          {typingVendor || (vendors ?? []).length === 0 ? (
+          {typingVendor || vendors.length === 0 ? (
             <input
               value={form.vendor}
               onChange={set('vendor')}
-              placeholder={(vendors ?? []).length === 0 ? 'Save vendors in Settings to pick them here' : 'Name'}
+              placeholder={vendors.length === 0 ? 'Save them in Company settings to pick them here' : 'Name'}
             />
           ) : (
             <select value={form.vendor} onChange={pickVendor}>

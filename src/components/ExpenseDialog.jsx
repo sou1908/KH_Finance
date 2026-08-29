@@ -3,6 +3,7 @@ import Dialog, { Field } from './Dialog'
 import Attachments from './Attachments'
 import UnitSelect from './UnitSelect'
 import { useApp } from '../store/AppStore'
+import { vendorsOfKind } from '../store/selectors'
 import { newId } from '../data/repo'
 import { money, num, today } from '../lib/format'
 
@@ -64,7 +65,12 @@ function itemsFrom(existing) {
 }
 
 export default function ExpenseDialog({ existing, lockedProject, onClose }) {
-  const { projects, accounts, categories, vendors, items: savedItems, add, update } = useApp()
+  const state = useApp()
+  const { projects, accounts, categories, items: savedItems, add, update } = state
+
+  // Only the shops and contractors kept for jobs. The landlord belongs on the
+  // company side and must never be offerable on a client's bill.
+  const vendors = vendorsOfKind(state, 'project')
 
   const [bill, setBill] = useState(() => ({
     ...blankBill(lockedProject),

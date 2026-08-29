@@ -26,6 +26,7 @@ import {
   moneyMovement,
   periodRange,
   projectTotals,
+  vendorsOfKind,
 } from './selectors.js'
 import { filterStateFor } from '../../server/roles.js'
 
@@ -49,7 +50,13 @@ const base = {
     { id: 'acc_co', name: 'Company A/C', kind: 'company', openingBalance: 0 },
   ],
   projects: [{ id: 'kothari', name: 'Kothari', quotedAmount: 1450000 }],
-  clients: [], vendors: [], items: [], movements: [], transfers: [],
+  vendors: [
+    { id: 'v_ply', name: 'Shree Plywood', kind: 'project' },
+    { id: 'v_crew', name: 'Ramesh crew', kind: 'project' },
+    { id: 'v_land', name: 'S. Mehta', kind: 'company' },
+    { id: 'v_power', name: 'Adani Electricity', kind: 'company' },
+  ],
+  clients: [], items: [], movements: [], transfers: [],
 
   receipts: [
     { id: 'r1', projectId: 'kothari', accountId: 'acc_cash', date: '2026-04-05', amount: 700000 },
@@ -82,7 +89,15 @@ check('the job still shows only its own 157,500', withCo.expenditure === 157500,
 const allProjects = projectTotals(base, 'all')
 check('even across all projects, rent stays out', allProjects.expenditure === 157500, String(allProjects.expenditure))
 
-console.log('\n=== heads keep to their own side ===')
+console.log('\n=== heads and vendors keep to their own side ===')
+check('4 vendors split 2 per side', vendorsOfKind(base, 'project').length === 2 && vendorsOfKind(base, 'company').length === 2)
+check('the landlord is never offered on a client bill', !vendorsOfKind(base, 'project').some((v) => v.name === 'S. Mehta'))
+check('and the plywood shop never on a power bill', !vendorsOfKind(base, 'company').some((v) => v.name === 'Shree Plywood'))
+// A vendor saved before the split has no kind at all and must stay where it was.
+const legacy = { ...base, vendors: [...base.vendors, { id: 'v_old', name: 'Old Shop' }] }
+check('a vendor from before the split stays on the project side', vendorsOfKind(legacy, 'project').some((v) => v.name === 'Old Shop'))
+check('and does not appear on the company side', !vendorsOfKind(legacy, 'company').some((v) => v.name === 'Old Shop'))
+
 check('5 heads split 2 project / 3 company', headsOfKind(base, 'project').length === 2 && headsOfKind(base, 'company').length === 3)
 const breakdown = categoryBreakdown(base, 'all')
 check('the project breakdown never lists a company head', breakdown.every((c) => c.kind === 'project'), JSON.stringify(breakdown.map((c) => c.name)))
@@ -172,8 +187,13 @@ check('companyExpenses is not in the payload at all', !('companyExpenses' in sen
 check('neither is offices', !('offices' in sent))
 check('nor accounts, receipts or transfers', !['accounts', 'receipts', 'transfers'].some((k) => k in sent))
 const asText = JSON.stringify(sent)
-check('no company vendor name appears anywhere in it', !/Landlord|Agency/.test(asText))
-check('and no company amount does either', !/60000|45000|25000/.test(asText))
+check('no company amount appears anywhere in it', !/60000|45000|25000/.test(asText))
+// Field filtering alone would not have caught these: vendors and categories are
+// entities procurement does receive, carrying rows from both sides.
+check('the landlord is not in their vendor list', !/S\. Mehta|Adani/.test(asText), asText.slice(0, 200))
+check('they still get the shops they collect from', sent.vendors.length === 2 && sent.vendors.every((v) => v.kind === 'project'))
+check('and no company head either', !/Rent|Marketing|Electricity/.test(asText))
+check('but every project head is there', sent.categories.length === 2)
 check('but they still get the purchase lines they need', sent.expenses.length === 1)
 check('with no rate on them', !('rate' in sent.expenses[0]), JSON.stringify(sent.expenses[0]))
 // An owner is handed the state untouched — same object, nothing stripped.

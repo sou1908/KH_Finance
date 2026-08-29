@@ -1,139 +1,33 @@
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import Panel, { Empty } from '../components/Panel'
 import MasterDialog from '../components/MasterDialog'
-import UsersPanel from '../components/UsersPanel'
-import { ENTITIES, WITH_FILES, useApp } from '../store/AppStore'
-import { getFile, humanSize, putFile, storageEstimate } from '../data/files'
+import VendorsPanel from '../components/VendorsPanel'
+import SharedSetup from '../components/SharedSetup'
+import { useApp } from '../store/AppStore'
 import { headsOfKind } from '../store/selectors'
 import { money } from '../lib/format'
 
 /**
- * Masters live here so the firm can change its own chart of accounts and heads
- * without a deploy. Everything on this page is data the rest of the app reads.
+ * Setup for the project side.
+ *
+ * Masters live here so the firm can change its own heads, items and clients
+ * without a deploy. The company side has its own page: keeping one combined
+ * list would put "Rent" in the dropdown on a client's bill and "Plywood" in the
+ * one on a power bill, and that separation is what keeps the two sets of
+ * figures from contaminating each other.
  */
 export default function Settings() {
   const state = useApp()
   const [dialog, setDialog] = useState(null)
-  const fileRef = useRef(null)
-
-  const [busy, setBusy] = useState('')
-  const [usage, setUsage] = useState(null)
-
-  useEffect(() => {
-    storageEstimate().then(setUsage).catch(() => {})
-  }, [state.expenses, state.receipts])
-
-
-  const allAttachments = WITH_FILES.flatMap((entity) =>
-    (state[entity] ?? []).flatMap((row) => row.attachments ?? []),
-  )
-
-  const blobToDataUrl = (blob) =>
-    new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onload = () => resolve(reader.result)
-      reader.onerror = () => reject(reader.error)
-      reader.readAsDataURL(blob)
-    })
-
-  // A backup that dropped bill photos would be worse than no backup, so the
-  // files ride along base64-encoded inside the same JSON.
-  const exportBackup = async () => {
-    setBusy('Packing backup…')
-    try {
-      const files = {}
-      for (const meta of allAttachments) {
-        const blob = await getFile(meta.id)
-        if (blob) files[meta.id] = await blobToDataUrl(blob)
-      }
-
-      const payload = {
-        format: 'kalope-backup',
-        version: 2,
-        exportedAt: new Date().toISOString(),
-        // Driven off the store's own entity list, so a backup cannot quietly omit
-        // something added later.
-        ...Object.fromEntries(ENTITIES.map((entity) => [entity, state[entity] ?? []])),
-        files,
-      }
-
-      const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `kalope-backup-${new Date().toISOString().slice(0, 10)}.json`
-      a.click()
-      URL.revokeObjectURL(url)
-    } catch (err) {
-      window.alert(`Backup failed — ${err.message}.`)
-    } finally {
-      setBusy('')
-    }
-  }
-
-  /**
-   * The only destructive button left. It names what is about to go, because
-   * "delete everything?" is easy to click past when the answer feels obvious
-   * and the ledger has a year of work in it.
-   */
-  const eraseEverything = () => {
-    const counts = [
-      [state.projects.length, 'project'],
-      [state.receipts.length, 'receipt'],
-      [state.expenses.length, 'expense'],
-      [state.companyExpenses.length, 'company expense'],
-      [state.transfers.length, 'transfer'],
-      [allAttachments.length, 'attached file'],
-    ]
-      .filter(([n]) => n > 0)
-      .map(([n, noun]) => `${n} ${noun}${n === 1 ? '' : 's'}`)
-
-    if (counts.length === 0) {
-      window.alert('There is nothing to erase yet.')
-      return
-    }
-
-    if (!window.confirm(`Erase ${counts.join(', ')}?\n\nTake a backup first if you are not certain.`)) return
-    if (!window.confirm('Last check — this clears the ledger. Continue?')) return
-
-    state.clearAll()
-  }
-
-  const importBackup = (e) => {
-    const file = e.target.files?.[0]
-    e.target.value = ''
-    if (!file) return
-
-    const reader = new FileReader()
-    reader.onload = async () => {
-      try {
-        const data = JSON.parse(reader.result)
-        if (!Array.isArray(data.projects)) throw new Error('no project list found in it')
-        if (!window.confirm('Replace everything currently in this browser with the backup?')) return
-
-        setBusy('Restoring…')
-        for (const [id, dataUrl] of Object.entries(data.files ?? {})) {
-          const blob = await (await fetch(dataUrl)).blob()
-          await putFile(id, blob)
-        }
-        state.importAll(data)
-      } catch (err) {
-        window.alert(`That file could not be read as a Kalope Homes backup — ${err.message}.`)
-      } finally {
-        setBusy('')
-      }
-    }
-    reader.readAsText(file)
-  }
 
   return (
     <>
       <div className="page-head">
         <div>
-          <span className="eyebrow">Setup</span>
-          <h1>Settings</h1>
+          <span className="eyebrow">Projects · Setup</span>
+          <h1>Project settings</h1>
           <div className="crumb">
-            Heads, offices, accounts and clients — change these and the whole app follows.
+            Heads, items and clients for the job side. Company heads and payees live under Company settings.
           </div>
         </div>
       </div>
@@ -208,67 +102,8 @@ export default function Settings() {
           </div>
         </Panel>
 
-        <CompanyHeadsPanel state={state} setDialog={setDialog} />
-        <OfficesPanel state={state} setDialog={setDialog} />
-
-        <Panel
-          title="Accounts"
-          action={
-            <button className="btn tiny" onClick={() => setDialog({ kind: 'account' })}>
-              Add account
-            </button>
-          }
-          flush
-        >
-          <div className="table-wrap">
-            <table className="data">
-              <thead>
-                <tr>
-                  <th>Account</th>
-                  <th>Type</th>
-                  <th>Holder</th>
-                  <th className="right">Opening balance</th>
-                  <th className="right">Movements</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {state.accounts.map((a) => {
-                  const count =
-                    state.expenses.filter((e) => e.accountId === a.id).length +
-                    state.companyExpenses.filter((e) => e.accountId === a.id).length +
-                    state.receipts.filter((r) => r.accountId === a.id).length
-                  return (
-                    <tr key={a.id}>
-                      <td style={{ fontWeight: 500 }}>{a.name}</td>
-                      <td>
-                        <span className="chip">{a.kind}</span>
-                      </td>
-                      <td className="note">{a.holder || '—'}</td>
-                      <td className="amount">{money(a.openingBalance)}</td>
-                      <td className="amount">{count}</td>
-                      <td>
-                        <div className="row-actions">
-                          <button className="btn ghost tiny" onClick={() => setDialog({ kind: 'account', row: a })}>
-                            Edit
-                          </button>
-                          <button
-                            className="btn ghost tiny danger"
-                            disabled={count > 0}
-                            title={count > 0 ? 'Reassign its entries before deleting' : ''}
-                            onClick={() => state.remove('accounts', a.id)}
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        </Panel>
+        <VendorsPanel state={state} setDialog={setDialog} side="project" />
+        <ItemsPanel state={state} setDialog={setDialog} />
 
         <Panel
           title="Clients"
@@ -321,108 +156,7 @@ export default function Settings() {
           </div>
         </Panel>
 
-        <Panel
-          title="Vendors"
-          action={
-            <button className="btn tiny" onClick={() => setDialog({ kind: 'vendor' })}>
-              Add vendor
-            </button>
-          }
-          flush
-        >
-          {state.vendors.length === 0 ? (
-            <Empty
-              title="No vendors saved yet"
-              action={
-                <button className="btn primary" onClick={() => setDialog({ kind: 'vendor' })}>
-                  Add your first vendor
-                </button>
-              }
-            >
-              Save the shops and contractors you buy from and their names become a dropdown when recording a bill —
-              typed once, spelled the same way every time.
-            </Empty>
-          ) : (
-            <div className="table-wrap">
-              <table className="data">
-                <thead>
-                  <tr>
-                    <th>Vendor</th>
-                    <th className="col-optional">Phone</th>
-                    <th className="col-optional">Note</th>
-                    <th className="right">Bills</th>
-                    <th />
-                  </tr>
-                </thead>
-                <tbody>
-                  {state.vendors.map((v) => {
-                    // Bills store the vendor's name, so this counts by name.
-                    const count = state.expenses.filter((e) => e.vendor === v.name).length
-                    return (
-                      <tr key={v.id}>
-                        <td style={{ fontWeight: 500 }}>{v.name}</td>
-                        <td className="num col-optional">{v.phone || '—'}</td>
-                        <td className="note col-optional">{v.note || '—'}</td>
-                        <td className="amount">{count}</td>
-                        <td>
-                          <div className="row-actions">
-                            <button className="btn ghost tiny" onClick={() => setDialog({ kind: 'vendor', row: v })}>
-                              Edit
-                            </button>
-                            <button
-                              className="btn ghost tiny danger"
-                              title="Removing a vendor leaves past bills untouched"
-                              onClick={() =>
-                                window.confirm(
-                                  `Remove ${v.name} from the list?\n\nBills already recorded against them are not affected.`,
-                                ) && state.remove('vendors', v.id)
-                              }
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </Panel>
-
-        <ItemsPanel state={state} setDialog={setDialog} />
-
-        <UsersPanel />
-
-        <Panel title="Your data">
-          <p className="note" style={{ marginTop: 0 }}>
-            v1 keeps everything in this browser only — the ledger in local storage, and{' '}
-            <strong>{allAttachments.length}</strong> attached file
-            {allAttachments.length === 1 ? '' : 's'} in this browser's database. Nothing leaves this machine, and
-            clearing site data wipes both. Take a backup regularly.
-            {usage && (
-              <>
-                {' '}
-                Currently using <span className="num">{humanSize(usage.usage)}</span> of roughly{' '}
-                <span className="num">{humanSize(usage.quota)}</span> available.
-              </>
-            )}
-          </p>
-          <div className="toolbar" style={{ margin: 0 }}>
-            <button className="btn" onClick={exportBackup} disabled={Boolean(busy)}>
-              {busy === 'Packing backup…' ? busy : 'Download backup'}
-            </button>
-            <button className="btn" onClick={() => fileRef.current?.click()} disabled={Boolean(busy)}>
-              {busy === 'Restoring…' ? busy : 'Restore from backup'}
-            </button>
-            <input ref={fileRef} type="file" accept="application/json" hidden onChange={importBackup} />
-            <div className="spacer" />
-            <button className="btn danger" onClick={eraseEverything}>
-              Erase everything
-            </button>
-          </div>
-        </Panel>
+        <SharedSetup setDialog={setDialog} />
       </div>
 
       {dialog && (
@@ -434,171 +168,6 @@ export default function Settings() {
         />
       )}
     </>
-  )
-}
-
-/**
- * Heads for the company side, kept in a panel of their own.
- *
- * Same table as the project heads, deliberately a separate list on screen. One
- * combined list would put "Rent" in the dropdown on a client's bill and
- * "Plywood" in the dropdown on a power bill, and the split is the only thing
- * keeping company costs out of project figures.
- */
-function CompanyHeadsPanel({ state, setDialog }) {
-  const heads = headsOfKind(state, 'company')
-
-  return (
-    <Panel
-      title="Company heads"
-      action={
-        <button className="btn tiny" onClick={() => setDialog({ kind: 'companyHead' })}>
-          Add company head
-        </button>
-      }
-      flush
-    >
-      {heads.length === 0 ? (
-        <Empty
-          title="No company heads yet"
-          action={
-            <button className="btn primary" onClick={() => setDialog({ kind: 'companyHead' })}>
-              Add the first one
-            </button>
-          }
-        >
-          These are what the business costs to run — rent, electricity, internet, marketing. The test: if you would
-          still pay it with no jobs running, it belongs here rather than under a project head.
-        </Empty>
-      ) : (
-        <div className="table-wrap">
-          <table className="data">
-            <thead>
-              <tr>
-                <th>Head</th>
-                <th className="right">Bills filed</th>
-                <th className="right col-optional">Total spent</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {heads.map((c) => {
-                const rows = state.companyExpenses.filter((e) => e.categoryId === c.id)
-                const spent = rows.reduce((t, e) => t + (Number(e.amount) || 0), 0)
-                return (
-                  <tr key={c.id}>
-                    <td style={{ fontWeight: 500 }}>{c.name}</td>
-                    <td className="amount">{rows.length}</td>
-                    <td className="amount col-optional">{spent ? money(spent) : '—'}</td>
-                    <td>
-                      <div className="row-actions">
-                        <button className="btn ghost tiny" onClick={() => setDialog({ kind: 'companyHead', row: c })}>
-                          Edit
-                        </button>
-                        <button
-                          className="btn ghost tiny danger"
-                          disabled={rows.length > 0}
-                          title={
-                            rows.length > 0
-                              ? `${rows.length} bill${rows.length === 1 ? '' : 's'} are filed under this head. Reassign them first.`
-                              : 'Remove this head'
-                          }
-                          onClick={() => state.remove('categories', c.id)}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </Panel>
-  )
-}
-
-/**
- * Offices, so two premises can be compared against each other.
- *
- * Nothing is seeded here. An invented office name would be indistinguishable
- * from a real one after a week, and a cost filed against the wrong premises is
- * worse than one filed against none.
- */
-function OfficesPanel({ state, setDialog }) {
-  return (
-    <Panel
-      title="Offices"
-      action={
-        <button className="btn tiny" onClick={() => setDialog({ kind: 'office' })}>
-          Add office
-        </button>
-      }
-      flush
-    >
-      {state.offices.length === 0 ? (
-        <Empty
-          title="No offices set up"
-          action={
-            <button className="btn primary" onClick={() => setDialog({ kind: 'office' })}>
-              Add your first office
-            </button>
-          }
-        >
-          Add each premises and every company bill can be charged to one, so you can see what each is costing you.
-          Costs that belong to no single office — an ad campaign, a software licence — stay marked company-wide.
-        </Empty>
-      ) : (
-        <div className="table-wrap">
-          <table className="data">
-            <thead>
-              <tr>
-                <th>Office</th>
-                <th className="col-optional">Address</th>
-                <th className="right">Bills filed</th>
-                <th className="right col-optional">Total spent</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {state.offices.map((o) => {
-                const rows = state.companyExpenses.filter((e) => e.officeId === o.id)
-                const spent = rows.reduce((t, e) => t + (Number(e.amount) || 0), 0)
-                return (
-                  <tr key={o.id}>
-                    <td style={{ fontWeight: 500 }}>{o.name}</td>
-                    <td className="note col-optional">{o.address || '—'}</td>
-                    <td className="amount">{rows.length}</td>
-                    <td className="amount col-optional">{spent ? money(spent) : '—'}</td>
-                    <td>
-                      <div className="row-actions">
-                        <button className="btn ghost tiny" onClick={() => setDialog({ kind: 'office', row: o })}>
-                          Edit
-                        </button>
-                        <button
-                          className="btn ghost tiny danger"
-                          disabled={rows.length > 0}
-                          title={
-                            rows.length > 0
-                              ? `${rows.length} bill${rows.length === 1 ? '' : 's'} are charged to this office. Reassign them first.`
-                              : 'Remove this office'
-                          }
-                          onClick={() => state.remove('offices', o.id)}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </Panel>
   )
 }
 
@@ -624,7 +193,11 @@ function ItemsPanel({ state, setDialog }) {
     <Panel
       title="Items you buy"
       action={
-        <button className="btn tiny" disabled={!headId} onClick={() => setDialog({ kind: 'item', presets: { categoryId: headId, unit: head?.unit ?? '' } })}>
+        <button
+          className="btn tiny"
+          disabled={!headId}
+          onClick={() => setDialog({ kind: 'item', presets: { categoryId: headId, unit: head?.unit ?? '' } })}
+        >
           Add item
         </button>
       }

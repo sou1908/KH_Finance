@@ -647,9 +647,18 @@ export function projectSummaries(state) {
    What the business costs to run. None of this touches a project figure: the
    rows live in their own table and no project selector ever reads them.        */
 
-/** Heads that belong to the company side, or the project side. */
+/**
+ * Heads and vendors, per side.
+ *
+ * Both default to `project` when a row predates the split, so an existing
+ * ledger keeps every head and vendor exactly where it already was.
+ */
 export function headsOfKind(state, kind) {
   return state.categories.filter((c) => (c.kind || 'project') === kind)
+}
+
+export function vendorsOfKind(state, kind) {
+  return (state.vendors ?? []).filter((v) => (v.kind || 'project') === kind)
 }
 
 /**

@@ -11,7 +11,10 @@ const DEFAULTS = {
   companyHead: { name: '', unit: '', tracksInventory: false, kind: 'company' },
   account: { name: '', kind: ACCOUNT_KINDS.CASH, holder: '', openingBalance: 0 },
   client: { name: '', phone: '', note: '' },
-  vendor: { name: '', phone: '', note: '' },
+  vendor: { name: '', phone: '', note: '', kind: 'project' },
+  // Same table as vendors — a landlord and a plywood shop are both someone you
+  // pay — but kept as separate lists so neither appears on the other's bill.
+  companyVendor: { name: '', phone: '', note: '', kind: 'company' },
   item: { name: '', categoryId: '', unit: '', rate: '', note: '' },
   office: { name: '', address: '', note: '' },
 }
@@ -22,6 +25,7 @@ const ENTITY = {
   account: 'accounts',
   client: 'clients',
   vendor: 'vendors',
+  companyVendor: 'vendors',
   item: 'items',
   office: 'offices',
 }
@@ -32,6 +36,7 @@ const NOUN = {
   account: 'account',
   client: 'client',
   vendor: 'vendor',
+  companyVendor: 'company vendor',
   item: 'item',
   office: 'office',
 }
@@ -67,8 +72,8 @@ export default function MasterDialog({ kind, row, presets, onClose }) {
     // Which side of the app a head belongs to is set by which panel opened this
     // form, never by the form itself. An editable dropdown here would let a
     // head be flipped after bills are already filed under it.
-    if (kind === 'category') record.kind = 'project'
-    if (kind === 'companyHead') record.kind = 'company'
+    if (kind === 'category' || kind === 'vendor') record.kind = 'project'
+    if (kind === 'companyHead' || kind === 'companyVendor') record.kind = 'company'
 
     if (kind === 'account') {
       record.openingBalance = Number(form.openingBalance) || 0
@@ -93,9 +98,11 @@ export default function MasterDialog({ kind, row, presets, onClose }) {
           ? 'Every receipt and every bill is filed against one of these.'
           : kind === 'companyHead'
             ? 'For costs the business carries whether or not any job is running.'
-            : kind === 'office'
-              ? 'Somewhere costs are incurred, so you can compare one against another.'
-              : undefined
+            : kind === 'companyVendor'
+              ? 'Landlords, the power company, agencies — whoever the business pays to keep running.'
+              : kind === 'office'
+                ? 'Somewhere costs are incurred, so you can compare one against another.'
+                : undefined
       }
       onClose={onClose}
       footer={
@@ -186,7 +193,7 @@ export default function MasterDialog({ kind, row, presets, onClose }) {
           </>
         )}
 
-        {(kind === 'client' || kind === 'vendor') && (
+        {(kind === 'client' || kind === 'vendor' || kind === 'companyVendor') && (
           <div className="field-row">
             <Field label="Phone">
               <input type="tel" inputMode="tel" value={form.phone} onChange={set('phone')} />
@@ -195,7 +202,13 @@ export default function MasterDialog({ kind, row, presets, onClose }) {
               <input
                 value={form.note}
                 onChange={set('note')}
-                placeholder={kind === 'vendor' ? 'Shop address, contact person' : 'Address, referral, anything'}
+                placeholder={
+                  kind === 'vendor'
+                    ? 'Shop address, contact person'
+                    : kind === 'companyVendor'
+                      ? 'Account number, which office, contact person'
+                      : 'Address, referral, anything'
+                }
               />
             </Field>
           </div>

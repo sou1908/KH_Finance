@@ -24,7 +24,7 @@ import { newId } from './ids.js'
  *     rounds wrong is worthless.
  */
 
-export const SCHEMA_VERSION = 7
+export const SCHEMA_VERSION = 8
 
 export const SCHEMA = {
   app_meta: {
@@ -123,12 +123,20 @@ export const SCHEMA = {
     keys: ['KEY idx_offices_live (deleted_at)'],
   },
 
-  /** Shops and contractors, so a vendor name is picked rather than retyped. */
+  /**
+   * Shops and contractors, so a vendor name is picked rather than retyped.
+   *
+   * Split by side like the heads are: a plywood shop has no business in the
+   * dropdown on an electricity bill, and the landlord has none on a client's.
+   * Defaulting to 'project' is what makes the column safe to add to a live
+   * table — every vendor saved so far was named on a project bill.
+   */
   vendors: {
     columns: {
       id: 'VARCHAR(40) NOT NULL',
       name: 'VARCHAR(190) NOT NULL',
       phone: "VARCHAR(40) NOT NULL DEFAULT ''",
+      kind: "VARCHAR(20) NOT NULL DEFAULT 'project'",
       note: 'TEXT NULL',
       updated_at: 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP',
       deleted_at: 'DATETIME NULL',

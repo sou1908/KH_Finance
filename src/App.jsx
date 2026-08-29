@@ -14,6 +14,7 @@ import Settings from './pages/Settings'
 import Procurement from './pages/Procurement'
 import Company from './pages/Company'
 import CompanyExpenses from './pages/CompanyExpenses'
+import CompanySettings from './pages/CompanySettings'
 
 /** With a database configured, nothing is reachable until someone signs in. */
 function Gate({ children }) {
@@ -71,6 +72,7 @@ function RoleRoutes() {
             jobs are on. */}
         <Route path="company" element={<Company />} />
         <Route path="company/expenses" element={<CompanyExpenses />} />
+        <Route path="company/settings" element={<CompanySettings />} />
         <Route path="settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

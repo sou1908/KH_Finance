@@ -471,6 +471,21 @@ button.sync-pill:hover { border-color: rgba(255, 255, 255, 0.3); color: #fff; }
 .page-head .crumb { font-size: 12px; color: var(--ink-3); }
 .page-head .spacer { flex: 1; }
 
+/* Marks where a settings page stops being about one side of the business.
+   Without it the shared panels read as more company (or project) setup. */
+.section-rule {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 14px 0 -6px;
+}
+.section-rule::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--rule);
+}
+
 /* ------------------------------------------------------------------ panels */
 
 .panel {

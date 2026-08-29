@@ -65,7 +65,7 @@ to the remembered choice on Accounts and Settings, which belong to neither.
 | **Company** | What the business costs to run whatever jobs are on — rent, power, internet, marketing, software. Split by office, with a company-wide bucket for what belongs to neither. |
 | **Accounts** | Reconciliation. Both sides leave from the same accounts, so this is where they meet, and where "personal money tied up in jobs" becomes visible. |
 | **Inventory** | Bought quantity minus what has left the pool, for heads marked stock-tracked. Leftovers are stock, not loss. |
-| **Settings** | Heads, offices, accounts and clients as editable data — so the chart of accounts changes without a deploy. |
+| **Settings** | One page per side. Project settings holds job heads, items, vendors and clients; Company settings holds company heads, payees and offices. Accounts, logins and the backup are shared and appear under both. |
 
 Projects, receipts, expenses and company bills all take **file attachments** —
 the signed quotation, a photo of each bill, a bank screenshot. Every file filed
@@ -115,8 +115,21 @@ phase 4.)*
 figure filters on `project_id`, and one missed filter would put office rent
 inside a client's job cost — the exact failure the separate `transfers` table
 was created to prevent. A table that project queries never name cannot leak into
-them. Heads carry a `kind` of `project` or `company` for the same reason: rent
-must never be offerable on a client's bill.
+them. **Heads and vendors** both carry a `kind` of `project` or `company` for
+the same reason: rent must never be offerable on a client's bill, and the
+landlord must never appear in the vendor dropdown beside the plywood shop. Both
+default to `project`, so every head and vendor saved before the split stays
+exactly where it already was.
+
+Settings is split to match. Two pages, one per side, because a single combined
+page would make that separation look accidental rather than deliberate.
+Accounts, logins and the backup are genuinely shared and appear under both —
+hunting for the backup button by first working out which half of the app owns
+it would be the worse answer.
+
+Procurement is filtered by **row** as well as by field: `PROCUREMENT_ROWS` drops
+company heads and company vendors before the payload is built, since those are
+entities that account does otherwise receive.
 
 The test for which side something belongs on, written into the UI: **if you
 would stop paying it the day the job ends it is a project cost; if you would

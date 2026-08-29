@@ -70,6 +70,8 @@ export const ENTITIES = {
     id: 'id',
     name: 'name',
     phone: 'phone',
+    // 'project' (shops, contractors) or 'company' (landlord, power company).
+    kind: 'kind',
     note: 'note',
   },
   items: {

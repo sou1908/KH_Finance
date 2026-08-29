@@ -47,20 +47,23 @@ const MODES = {
         ],
       },
       { group: 'Money', items: [{ to: '/accounts', label: 'Accounts', tick: '02' }] },
-      { group: 'Setup', items: [{ to: '/settings', label: 'Settings', tick: '03' }] },
+      { group: 'Setup', items: [{ to: '/company/settings', label: 'Settings', tick: '03' }] },
     ],
   },
 }
 
-const PROJECT_PATHS = ['/projects', '/incoming', '/expenses', '/inventory']
+// Settings is per-side now, so /settings is a project route and
+// /company/settings is caught by the prefix. Accounts is the only page left
+// that genuinely belongs to both.
+const PROJECT_PATHS = ['/projects', '/incoming', '/expenses', '/inventory', '/settings']
 
 /**
  * Which side a path belongs to, or null when it belongs to both.
  *
  * Deriving the mode from the URL rather than storing it is what makes a
  * bookmark, a refresh and the back button all land in the right system.
- * Accounts and Settings answer null, so arriving there keeps whichever side
- * you were already on instead of throwing you back to Projects.
+ * Accounts answers null, so arriving there keeps whichever side you were
+ * already on instead of throwing you back to Projects.
  */
 function modeFromPath(pathname) {
   if (pathname.startsWith('/company')) return 'company'
