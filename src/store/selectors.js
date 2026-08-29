@@ -582,7 +582,15 @@ export function monthlyFlow(state, projectId) {
 }
 
 /** Receipts and expenses merged into one date-sorted ledger, newest first. */
-export function combinedLedger(state, projectId, limit) {
+/**
+ * Receipts and bills as one dated list.
+ *
+ * `includeCompany` is off by default and has to be asked for. It exists for the
+ * Accounts page, where a heading of "every movement" would be a lie without the
+ * rent — but the project dashboard's "latest entries" must never show a company
+ * bill, so the safe answer is the one you get by not thinking about it.
+ */
+export function combinedLedger(state, projectId, limit, { includeCompany = false } = {}) {
   const catName = Object.fromEntries(state.categories.map((c) => [c.id, c.name]))
   const accName = Object.fromEntries(state.accounts.map((a) => [a.id, a.name]))
 
@@ -607,10 +615,9 @@ export function combinedLedger(state, projectId, limit) {
       account: accName[e.accountId] ?? '—',
       amount: Number(e.amount) || 0,
     })),
-    // Company bills belong to no project, so they only appear when looking at
-    // everything. Leaving them out entirely would let a page headed "every
-    // movement" quietly omit the rent.
-    ...(projectId === 'all' || !projectId ? state.companyExpenses ?? [] : []).map((e) => ({
+    // Company bills belong to no project, so even when asked for they only
+    // appear while looking at everything.
+    ...(includeCompany && (projectId === 'all' || !projectId) ? state.companyExpenses ?? [] : []).map((e) => ({
       id: e.id,
       kind: 'out',
       company: true,

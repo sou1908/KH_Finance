@@ -36,8 +36,15 @@ the backup carries the attached files inside it.
 
 The business has a project side and a company side, and they run on different
 clocks — company costs are steady and monthly, job margins land in lumps when
-jobs finish. So they get separate dashboards rather than one blended figure,
-and they meet at **money in hand**, which sits in the top bar on every screen.
+jobs finish. So they are two systems rather than one blended figure, and they
+meet at **money in hand**, which sits in the top bar on every screen.
+
+The switch at the top of the rail swaps the **whole rail**, not just the page:
+in Company mode there is no Projects list to wander into and no client money
+anywhere. Accounts and Settings appear on both sides because they belong to
+both. The mode is read from the URL wherever the URL knows — so a bookmark, a
+refresh and the back button all land in the right system — and only falls back
+to the remembered choice on Accounts and Settings, which belong to neither.
 
 ```
               MONEY IN HAND          every account added up

@@ -19,7 +19,8 @@ export default function Accounts() {
   const [dialog, setDialog] = useState(null)
 
   const rows = accountLedger(state, scope)
-  const ledger = combinedLedger(state, scope)
+  // Both sides leave from these accounts, so both belong in the movement list.
+  const ledger = combinedLedger(state, scope, undefined, { includeCompany: true })
 
   const totalIn = rows.reduce((t, a) => t + a.inflow, 0)
   const totalOut = rows.reduce((t, a) => t + a.outflow, 0)

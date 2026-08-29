@@ -118,8 +118,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 }
 
 .rail-mark {
-  padding: 22px 20px 18px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 22px 20px 14px;
 }
 
 /* The logo lockup: serif name over letter-spaced cyan HOMES, as on the site. */
@@ -156,7 +155,47 @@ button, input, select, textarea { font: inherit; color: inherit; }
   display: block;
 }
 
-.rail-nav { padding: 12px 10px; display: flex; flex-direction: column; gap: 1px; flex: 1; overflow-y: auto; }
+/* Which half of the business you are in. Given its own colour per side —
+   cyan for jobs, orange for the company — so the mode is legible at a glance
+   rather than something you work out from the nav underneath. */
+.rail-switch {
+  display: flex;
+  gap: 2px;
+  margin: 0 14px 14px;
+  padding: 3px;
+  background: rgba(0, 0, 0, 0.28);
+  border-radius: var(--r);
+}
+
+.rail-switch-btn {
+  flex: 1;
+  padding: 7px 6px;
+  border: 0;
+  border-radius: calc(var(--r) - 3px);
+  background: transparent;
+  font-family: var(--font-ui);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: rgba(255, 255, 255, 0.55);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.rail-switch-btn:hover { color: #fff; }
+.rail-switch-btn.is-active.is-projects { background: var(--brand-cyan); color: var(--brand-deep); }
+.rail-switch-btn.is-active.is-company { background: var(--brand-orange); color: #fff; }
+
+.rail-nav {
+  padding: 0 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  overflow-y: auto;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 12px;
+}
 
 .rail-group {
   font-family: var(--font-data);
@@ -1287,16 +1326,31 @@ table.data .amount {
   .rail-mark .homes { margin-top: 0; font-size: 8.5px; letter-spacing: 0.24em; }
   .rail-mark .sub { display: none; }
 
-  .rail-nav {
+  /* Its own full-width row above the tabs. It changes what the whole tab strip
+     contains, so it has to be read before them — and at 390px it will not fit
+     beside the brand without crushing one of them. */
+  .rail-switch {
     order: 3;
+    /* Not `flex: 0 0 100%` — a 100% basis plus side margins is wider than the
+       row, and the whole page picks up a horizontal scroll from it. */
+    flex: none;
+    width: calc(100% - 28px);
+    margin: 2px 14px 0;
+  }
+
+  .rail-switch-btn { padding: 7px 12px; font-size: 11px; }
+
+  .rail-nav {
+    order: 4;
     flex: 0 0 100%;
     flex-direction: row;
     overflow-x: auto;
     overscroll-behavior-x: contain;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
-    padding: 0 8px 6px;
+    padding: 6px 8px;
     gap: 2px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
   }
 
   .rail-nav::-webkit-scrollbar { display: none; }

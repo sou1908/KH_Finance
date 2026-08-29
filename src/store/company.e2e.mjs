@@ -18,6 +18,7 @@
 import {
   accountLedger,
   categoryBreakdown,
+  combinedLedger,
   companyTotals,
   headsOfKind,
   inPeriod,
@@ -150,6 +151,18 @@ check('the months add up to exactly money in hand', accumulated === hand.total, 
 // accumulation is what makes that harmless.
 check('one month is positive and the next negative', april26.net > 0 && may26.net < 0)
 check('yet the total is still right', accumulated === 608500, String(accumulated))
+
+console.log('\n=== a company bill only appears where it was asked for ===')
+// It surfaced on the project dashboard's "latest entries" once, because one
+// shared selector fed both that list and the Accounts movement list.
+const projectFeed = combinedLedger(base, 'all', 20)
+check('the default feed carries no company bill', projectFeed.every((r) => !r.company), JSON.stringify(projectFeed.filter((r) => r.company)))
+check('and totals only the two project rows out', projectFeed.filter((r) => r.kind === 'out').length === 1, String(projectFeed.filter((r) => r.kind === 'out').length))
+
+const accountsFeed = combinedLedger(base, 'all', undefined, { includeCompany: true })
+check('asking for them gets all four company bills', accountsFeed.filter((r) => r.company).length === 4, String(accountsFeed.filter((r) => r.company).length))
+check('each one flagged so it reads as company money', accountsFeed.filter((r) => r.company).every((r) => r.kind === 'out'))
+check('scoped to a job, asking still gets none', combinedLedger(base, 'kothari', undefined, { includeCompany: true }).every((r) => !r.company))
 
 console.log('\n=== none of it is ever sent to a procurement browser ===')
 // filterStateFor is a pure function, so the real server rule can be checked

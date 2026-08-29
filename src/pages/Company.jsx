@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom'
 import Panel, { Empty } from '../components/Panel'
 import Measure from '../components/Measure'
 import FlowChart from '../components/FlowChart'
-import DashboardSwitch from '../components/DashboardSwitch'
 import { useApp } from '../store/AppStore'
 import {
   PERIODS,
@@ -63,8 +62,6 @@ export default function Company() {
             Rent, power, marketing and everything else that is not charged to a client.
           </div>
         </div>
-        <div className="spacer" style={{ flex: 1 }} />
-        <DashboardSwitch />
       </div>
 
       <div className="toolbar" style={{ marginBottom: 0 }}>
