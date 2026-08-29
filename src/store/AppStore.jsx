@@ -4,52 +4,14 @@ import { deleteFiles } from '../data/files'
 import { fetchState, getToken, getUser, isCloud, login as apiLogin, logout as apiLogout } from '../data/api'
 import { drain, enqueue, status as outboxStatus, subscribe } from '../data/outbox'
 import { DEFAULT_ACCOUNTS, DEFAULT_CATEGORIES } from '../data/masters'
+import { EMPTY, MASTERS, ROLES, WITH_FILES } from './entities'
 
 const AppContext = createContext(null)
 
-const EMPTY = {
-  accounts: [],
-  categories: [],
-  clients: [],
-  // Shops and contractors you buy from, so the name is picked rather than
-  // retyped — and spelled the same way every time.
-  vendors: [],
-  // The things you buy, each belonging to one head, with the unit and the last
-  // rate you paid.
-  items: [],
-  // Where a company cost was incurred. No office means company-wide.
-  offices: [],
-  projects: [],
-  receipts: [],
-  expenses: [],
-  // What the business costs to run, whatever jobs are on: rent, power,
-  // internet, marketing. Never attached to a project, so it can never land
-  // inside a client's job cost.
-  companyExpenses: [],
-  // Money expected to move on a date — EMIs, rent, whoever owes you. The only
-  // list in the app about the future rather than what already happened.
-  commitments: [],
-  // Money moved between our own accounts. Never income, never spending.
-  transfers: [],
-  // What happened to material after it was bought: used at site, moved to
-  // another job, or returned. Quantities only — never money.
-  movements: [],
-}
-
-/**
- * Every entity, in the order a backup should carry them.
- *
- * Declared beside EMPTY so adding one is a single edit. Listing entities by
- * hand in each place that walks them is how `transfers` went missing from
- * every backup taken between it shipping and this being noticed.
- */
-export const ENTITIES = Object.keys(EMPTY)
-
-/** The rows that can hold an attached file. Mirrors ATTACHABLE on the server. */
-export const WITH_FILES = ['projects', 'receipts', 'expenses', 'transfers', 'companyExpenses']
-
-/** Roles, mirroring server/roles.js. The server is what enforces them. */
-export const ROLES = { OWNER: 'owner', PROCUREMENT: 'procurement' }
+// The shape of the ledger lives in its own module so a plain Node test can
+// import it. Re-exported here because this is where the rest of the app has
+// always reached for it.
+export { EMPTY, ENTITIES, LEDGER, MASTERS, WITH_FILES, ROLES } from './entities'
 
 function reducer(state, action) {
   const { type, entity, payload } = action
@@ -197,7 +159,12 @@ export function AppProvider({ children }) {
         // Every kind of row that can hold a file. Missing one leaves its blobs
         // in IndexedDB with nothing left pointing at them.
         dropFilesFor(WITH_FILES.flatMap((entity) => s[entity] ?? []))
-        commit({ type: 'replaceAll', payload: EMPTY }, { type: 'replaceAll', entity: 'all', payload: EMPTY })
+
+        // The ledger goes; the setup stays. Accounts and heads are how the firm
+        // has chosen to organise itself, not a record of anything, and clearing
+        // them leaves nowhere to file the next bill.
+        const next = { ...EMPTY, ...Object.fromEntries(MASTERS.map((entity) => [entity, s[entity] ?? []])) }
+        commit({ type: 'replaceAll', payload: next }, { type: 'replaceAll', entity: 'all', payload: next })
       },
 
       importAll: (data) => {

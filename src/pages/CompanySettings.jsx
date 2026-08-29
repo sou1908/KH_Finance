@@ -4,6 +4,7 @@ import MasterDialog from '../components/MasterDialog'
 import VendorsPanel from '../components/VendorsPanel'
 import SharedSetup from '../components/SharedSetup'
 import { useApp } from '../store/AppStore'
+import { DEFAULT_CATEGORIES } from '../data/masters'
 import { headsOfKind } from '../store/selectors'
 import { money } from '../lib/format'
 
@@ -20,6 +21,15 @@ export default function CompanySettings() {
   const [dialog, setDialog] = useState(null)
 
   const heads = headsOfKind(state, 'company')
+
+  // A way back for anyone left with none. Ids are fixed, so a head that is
+  // still there is skipped rather than added twice.
+  const restoreHeads = () => {
+    const have = new Set(state.categories.map((c) => c.id))
+    DEFAULT_CATEGORIES.filter((c) => c.kind === 'company' && !have.has(c.id)).forEach((c) =>
+      state.add('categories', c),
+    )
+  }
 
   return (
     <>
@@ -47,9 +57,14 @@ export default function CompanySettings() {
             <Empty
               title="No company heads yet"
               action={
-                <button className="btn primary" onClick={() => setDialog({ kind: 'companyHead' })}>
-                  Add the first one
-                </button>
+                <div className="toolbar" style={{ margin: 0, justifyContent: 'center' }}>
+                  <button className="btn" onClick={restoreHeads}>
+                    Add the usual twelve
+                  </button>
+                  <button className="btn primary" onClick={() => setDialog({ kind: 'companyHead' })}>
+                    Add one myself
+                  </button>
+                </div>
               }
             >
               These are what the business costs to run — rent, electricity, internet, marketing. The test: if you

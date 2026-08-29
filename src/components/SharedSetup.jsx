@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import Panel from './Panel'
+import Panel, { Empty } from './Panel'
 import UsersPanel from './UsersPanel'
 import { ENTITIES, WITH_FILES, useApp } from '../store/AppStore'
+import { DEFAULT_ACCOUNTS } from '../data/masters'
 import { getFile, humanSize, putFile, storageEstimate } from '../data/files'
 import { money } from '../lib/format'
 
@@ -26,6 +27,13 @@ export default function SharedSetup({ setDialog }) {
   const allAttachments = WITH_FILES.flatMap((entity) =>
     (state[entity] ?? []).flatMap((row) => row.attachments ?? []),
   )
+
+  // A way back for anyone who cleared these before erasing kept them. Ids are
+  // fixed, so anything still present is skipped rather than duplicated.
+  const restoreAccounts = () => {
+    const have = new Set(state.accounts.map((a) => a.id))
+    DEFAULT_ACCOUNTS.filter((a) => !have.has(a.id)).forEach((a) => state.add('accounts', a))
+  }
 
   const blobToDataUrl = (blob) =>
     new Promise((resolve, reject) => {
@@ -119,7 +127,14 @@ export default function SharedSetup({ setDialog }) {
       return
     }
 
-    if (!window.confirm(`Erase ${counts.join(', ')}?\n\nTake a backup first if you are not certain.`)) return
+    if (
+      !window.confirm(
+        `Erase ${counts.join(', ')}?\n\n` +
+          'Your accounts, heads, offices, vendors, clients and reminders are kept.\n\n' +
+          'Take a backup first if you are not certain.',
+      )
+    )
+      return
     if (!window.confirm('Last check — this clears the ledger. Continue?')) return
 
     state.clearAll()
@@ -140,6 +155,25 @@ export default function SharedSetup({ setDialog }) {
         }
         flush
       >
+        {state.accounts.length === 0 ? (
+          <Empty
+            title="No accounts set up"
+            action={
+              <div className="toolbar" style={{ margin: 0, justifyContent: 'center' }}>
+                <button className="btn" onClick={restoreAccounts}>
+                  Add the usual four
+                </button>
+                <button className="btn primary" onClick={() => setDialog({ kind: 'account' })}>
+                  Add one myself
+                </button>
+              </div>
+            }
+          >
+            Every receipt and every bill is filed against an account — cash in hand, each partner's personal
+            account, and the company account. There is one set of them for the whole firm; the project side and
+            the company side spend from the same ones.
+          </Empty>
+        ) : (
         <div className="table-wrap">
           <table className="data">
             <thead>
@@ -190,6 +224,7 @@ export default function SharedSetup({ setDialog }) {
             </tbody>
           </table>
         </div>
+        )}
       </Panel>
 
       <UsersPanel />

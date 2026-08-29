@@ -4,6 +4,7 @@ import MasterDialog from '../components/MasterDialog'
 import VendorsPanel from '../components/VendorsPanel'
 import SharedSetup from '../components/SharedSetup'
 import { useApp } from '../store/AppStore'
+import { DEFAULT_CATEGORIES } from '../data/masters'
 import { headsOfKind } from '../store/selectors'
 import { money } from '../lib/format'
 
@@ -19,6 +20,17 @@ import { money } from '../lib/format'
 export default function Settings() {
   const state = useApp()
   const [dialog, setDialog] = useState(null)
+
+  const projectHeads = headsOfKind(state, 'project')
+
+  // A way back for anyone left with none. Ids are fixed, so a head that is
+  // still there is skipped rather than added twice.
+  const restoreHeads = () => {
+    const have = new Set(state.categories.map((c) => c.id))
+    DEFAULT_CATEGORIES.filter((c) => c.kind === 'project' && !have.has(c.id)).forEach((c) =>
+      state.add('categories', c),
+    )
+  }
 
   return (
     <>
@@ -42,6 +54,24 @@ export default function Settings() {
           }
           flush
         >
+          {projectHeads.length === 0 ? (
+            <Empty
+              title="No project heads yet"
+              action={
+                <div className="toolbar" style={{ margin: 0, justifyContent: 'center' }}>
+                  <button className="btn" onClick={restoreHeads}>
+                    Add the standard seven
+                  </button>
+                  <button className="btn primary" onClick={() => setDialog({ kind: 'category' })}>
+                    Add one myself
+                  </button>
+                </div>
+              }
+            >
+              Every job bill is filed under a head — Sheet, Fare, Hardware, Labour, Designer, Electric, Extra.
+              Without one there is nowhere to record a bill.
+            </Empty>
+          ) : (
           <div className="table-wrap">
             <table className="data">
               <thead>
@@ -54,7 +84,7 @@ export default function Settings() {
                 </tr>
               </thead>
               <tbody>
-                {headsOfKind(state, 'project').map((c) => {
+                {projectHeads.map((c) => {
                   const count = state.expenses.filter((e) => e.categoryId === c.id).length
                   // Items belong to a head. Deleting the head would strand them
                   // where no screen can reach them, since the Items panel only
@@ -100,6 +130,7 @@ export default function Settings() {
               </tbody>
             </table>
           </div>
+          )}
         </Panel>
 
         <VendorsPanel state={state} setDialog={setDialog} side="project" />
@@ -114,6 +145,19 @@ export default function Settings() {
           }
           flush
         >
+          {state.clients.length === 0 ? (
+            <Empty
+              title="No clients yet"
+              action={
+                <button className="btn primary" onClick={() => setDialog({ kind: 'client' })}>
+                  Add your first client
+                </button>
+              }
+            >
+              A project can be created without one, but naming the client keeps every job they have given you in one
+              place.
+            </Empty>
+          ) : (
           <div className="table-wrap">
             <table className="data">
               <thead>
@@ -154,6 +198,7 @@ export default function Settings() {
               </tbody>
             </table>
           </div>
+          )}
         </Panel>
 
         <SharedSetup setDialog={setDialog} />

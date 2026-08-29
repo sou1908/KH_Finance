@@ -29,6 +29,7 @@ import {
   vendorsOfKind,
 } from './selectors.js'
 import { filterStateFor } from '../../server/roles.js'
+import { ENTITIES, LEDGER, MASTERS } from './entities.js'
 
 let pass = 0, fail = 0
 const check = (l, ok, d = '') => { ok ? (pass++, console.log(`  PASS  ${l}`)) : (fail++, console.log(`  FAIL  ${l}${d ? ' — ' + d : ''}`)) }
@@ -166,6 +167,20 @@ check('the months add up to exactly money in hand', accumulated === hand.total, 
 // accumulation is what makes that harmless.
 check('one month is positive and the next negative', april26.net > 0 && may26.net < 0)
 check('yet the total is still right', accumulated === 608500, String(accumulated))
+
+console.log('\n=== erasing the ledger keeps the setup ===')
+// The confirmation only ever promised to remove projects, receipts, expenses
+// and transfers. It used to take the accounts and heads with them, and local
+// mode reseeds only when there is no saved data at all — so they never came
+// back, and there was nowhere left to file the next bill.
+const kept = new Set(MASTERS)
+check('accounts are setup, not ledger', kept.has('accounts'))
+check('so are the heads', kept.has('categories'))
+check('and offices, vendors, items, clients', ['offices', 'vendors', 'items', 'clients'].every((e) => kept.has(e)))
+check('and the reminders', kept.has('commitments'))
+check('projects and their money are ledger', ['projects', 'receipts', 'expenses', 'companyExpenses', 'transfers', 'movements'].every((e) => !kept.has(e)))
+check('every entity is on exactly one side', MASTERS.length + LEDGER.length === ENTITIES.length, `${MASTERS.length}+${LEDGER.length} vs ${ENTITIES.length}`)
+check('and none is on both', !MASTERS.some((e) => LEDGER.includes(e)))
 
 console.log('\n=== a company bill only appears where it was asked for ===')
 // It surfaced on the project dashboard's "latest entries" once, because one
