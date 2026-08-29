@@ -3,6 +3,7 @@ import Panel, { Empty } from '../components/Panel'
 import Measure from '../components/Measure'
 import Caliper from '../components/Caliper'
 import FlowChart from '../components/FlowChart'
+import DashboardSwitch from '../components/DashboardSwitch'
 import { useApp } from '../store/AppStore'
 import { useScope } from '../store/ScopeContext'
 import {
@@ -34,23 +35,45 @@ export default function Dashboard() {
 
   if (!state.projects.length) {
     return (
-      <Panel>
-        <Empty
-          title="No projects yet"
-          action={
-            <Link className="btn primary" to="/projects">
-              Add your first project
-            </Link>
-          }
-        >
-          Every receipt and every bill belongs to a project. Create one and the numbers start filling in.
-        </Empty>
-      </Panel>
+      <div className="stack">
+        <div className="page-head">
+          <div>
+            <span className="eyebrow">Projects</span>
+            <h1>What the jobs are doing</h1>
+          </div>
+          <div className="spacer" />
+          {/* Kept here too: with no projects yet the company side may still be
+              the half that has data, and this is the only way across. */}
+          <DashboardSwitch />
+        </div>
+        <Panel>
+          <Empty
+            title="No projects yet"
+            action={
+              <Link className="btn primary" to="/projects">
+                Add your first project
+              </Link>
+            }
+          >
+            Every receipt and every bill belongs to a project. Create one and the numbers start filling in.
+          </Empty>
+        </Panel>
+      </div>
     )
   }
 
   return (
     <div className="stack">
+      <div className="page-head">
+        <div>
+          <span className="eyebrow">Projects</span>
+          <h1>What the jobs are doing</h1>
+          <div className="crumb">Client money in, job costs out, and what each job is earning.</div>
+        </div>
+        <div className="spacer" />
+        <DashboardSwitch />
+      </div>
+
       <div className="grid cols-3">
         <Measure
           label="Total incoming"

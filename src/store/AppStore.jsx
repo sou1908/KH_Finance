@@ -17,9 +17,15 @@ const EMPTY = {
   // The things you buy, each belonging to one head, with the unit and the last
   // rate you paid.
   items: [],
+  // Where a company cost was incurred. No office means company-wide.
+  offices: [],
   projects: [],
   receipts: [],
   expenses: [],
+  // What the business costs to run, whatever jobs are on: rent, power,
+  // internet, marketing. Never attached to a project, so it can never land
+  // inside a client's job cost.
+  companyExpenses: [],
   // Money moved between our own accounts. Never income, never spending.
   transfers: [],
   // What happened to material after it was bought: used at site, moved to
@@ -36,8 +42,8 @@ const EMPTY = {
  */
 export const ENTITIES = Object.keys(EMPTY)
 
-/** The rows that can hold an attached file. */
-export const WITH_FILES = ['projects', 'receipts', 'expenses', 'transfers']
+/** The rows that can hold an attached file. Mirrors ATTACHABLE on the server. */
+export const WITH_FILES = ['projects', 'receipts', 'expenses', 'transfers', 'companyExpenses']
 
 /** Roles, mirroring server/roles.js. The server is what enforces them. */
 export const ROLES = { OWNER: 'owner', PROCUREMENT: 'procurement' }

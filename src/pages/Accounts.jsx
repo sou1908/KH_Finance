@@ -23,6 +23,9 @@ export default function Accounts() {
 
   const totalIn = rows.reduce((t, a) => t + a.inflow, 0)
   const totalOut = rows.reduce((t, a) => t + a.outflow, 0)
+  // Company costs leave the same accounts as job costs, so a balance that
+  // ignored them would read high by every office bill ever paid.
+  const totalCompanyOut = rows.reduce((t, a) => t + a.companyOutflow, 0)
   const totalBalance = rows.reduce((t, a) => t + a.balance, 0)
 
   const transfers = transferLedger(state, scope)
@@ -43,9 +46,18 @@ export default function Accounts() {
     <div className="stack">
       <div className="grid cols-3">
         <Measure label="Into all accounts" value={totalIn} tone="in" foot={`${state.receipts.length} receipts on record`} />
-        <Measure label="Out of all accounts" value={totalOut} tone="out" foot={`${state.expenses.length} bills on record`} />
         <Measure
-          label="Held across accounts"
+          label="Out of all accounts"
+          value={totalOut + totalCompanyOut}
+          tone="out"
+          foot={
+            totalCompanyOut > 0
+              ? `${money(totalOut)} on jobs · ${money(totalCompanyOut)} running the business`
+              : `${state.expenses.length} bills on record`
+          }
+        />
+        <Measure
+          label="Money in hand"
           value={totalBalance}
           tone={totalBalance < 0 ? 'warn' : 'left'}
           foot={
@@ -93,7 +105,10 @@ export default function Accounts() {
                   <th>Type</th>
                   {scope === 'all' && <th className="right col-optional">Opening</th>}
                   <th className="right">In</th>
-                  <th className="right">Out</th>
+                  <th className="right">On jobs</th>
+                  {/* Without this column the row would not add up on screen:
+                      the balance already has company costs taken out of it. */}
+                  {scope === 'all' && <th className="right">Company</th>}
                   <th className="right col-optional">Moved in</th>
                   <th className="right col-optional">Moved out</th>
                   <th className="right">Balance</th>
@@ -107,7 +122,8 @@ export default function Accounts() {
                   // account with entries elsewhere must not be deletable here.
                   const totalMovements =
                     state.receipts.filter((r) => r.accountId === a.id).length +
-                    state.expenses.filter((e) => e.accountId === a.id).length
+                    state.expenses.filter((e) => e.accountId === a.id).length +
+                    state.companyExpenses.filter((e) => e.accountId === a.id).length
 
                   return (
                     <tr key={a.id}>
@@ -123,12 +139,19 @@ export default function Accounts() {
                       {scope === 'all' && <td className="amount note col-optional">{money(a.opening)}</td>}
                       <td className="amount">{money(a.inflow)}</td>
                       <td className="amount">{money(a.outflow)}</td>
+                      {scope === 'all' && (
+                        <td className="amount">{a.companyOutflow ? money(a.companyOutflow) : '—'}</td>
+                      )}
                       <td className="amount note col-optional">{a.transferIn ? money(a.transferIn) : '—'}</td>
                       <td className="amount note col-optional">{a.transferOut ? money(a.transferOut) : '—'}</td>
                       <td className={`amount ${a.balance < 0 ? 'neg' : 'pos'}`} style={{ fontWeight: 600 }}>
                         {money(a.balance)}
                       </td>
-                      <td className="amount note col-optional">{totalOut ? pct(a.outflow / totalOut) : '—'}</td>
+                      <td className="amount note col-optional">
+                        {totalOut + totalCompanyOut
+                          ? pct((a.outflow + a.companyOutflow) / (totalOut + totalCompanyOut))
+                          : '—'}
+                      </td>
                       <td>
                         <div className="row-actions">
                           <button
@@ -164,6 +187,7 @@ export default function Accounts() {
                   </th>
                   <th className="amount">{money(totalIn)}</th>
                   <th className="amount">{money(totalOut)}</th>
+                  {scope === 'all' && <th className="amount">{money(totalCompanyOut)}</th>}
                   {/* Moved in and out always cancel across all accounts, so
                       showing a total would only ever be noise. */}
                   <th className="col-optional" />
@@ -216,6 +240,10 @@ export default function Accounts() {
                     </td>
                     <td>
                       {row.head} · {row.party || '—'}
+                      {/* Rent and a client's plywood both leave the same
+                          account. Saying which is which is the whole point of
+                          the two sides being separate. */}
+                      {row.company && <span className="chip" style={{ marginLeft: 8 }}>Company</span>}
                       {row.detail && <span className="sub-line">{row.detail}</span>}
                     </td>
                     <td className={`amount ${row.kind === 'in' ? 'pos' : ''}`}>

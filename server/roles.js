@@ -26,9 +26,11 @@ export const isOwner = (user) => (user?.role ?? ROLES.OWNER) === ROLES.OWNER
 /**
  * Procurement's view of the ledger.
  *
- * Entities absent from this map are never sent at all — receipts, transfers and
- * accounts do not appear, so there is nothing to leak. For the entities that do
- * appear, only the listed fields survive.
+ * Entities absent from this map are never sent at all — receipts, transfers,
+ * accounts, offices and companyExpenses do not appear, so there is nothing to
+ * leak. Adding an entity to the app therefore hides it from procurement by
+ * default, which is the right way round. For the entities that do appear, only
+ * the listed fields survive.
  *
  * expenses keeps vendor (they collect from them) and quantity (their whole job)
  * and drops rate, amount and billNo. A purchase line without its price is still
@@ -36,7 +38,7 @@ export const isOwner = (user) => (user?.role ?? ROLES.OWNER) === ROLES.OWNER
  */
 export const PROCUREMENT_FIELDS = {
   projects: ['id', 'name', 'site', 'status', 'startDate'],
-  categories: ['id', 'name', 'unit', 'tracksInventory'],
+  categories: ['id', 'name', 'unit', 'tracksInventory', 'kind'],
   items: ['id', 'categoryId', 'name', 'unit'],
   vendors: ['id', 'name', 'phone'],
   expenses: ['id', 'projectId', 'date', 'categoryId', 'vendor', 'description', 'qty', 'unit', 'usedQty'],

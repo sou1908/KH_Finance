@@ -3,6 +3,17 @@
  * that knows the difference, so adding a column means one line here and one
  * line in schema.js.
  */
+
+/**
+ * The table an entity lives in.
+ *
+ * Every entity used to be one lowercase word, so the key doubled as the table
+ * name and the queries interpolated it directly. `companyExpenses` broke that,
+ * and the two ways out were a hand-written lookup — a third list to keep in
+ * step — or deriving it. Derived wins: a future entity needs no entry anywhere.
+ */
+export const tableOf = (entity) => entity.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`)
+
 export const ENTITIES = {
   clients: {
     id: 'id',
@@ -22,6 +33,17 @@ export const ENTITIES = {
     name: 'name',
     unit: 'unit',
     tracksInventory: 'tracks_inventory',
+    // 'project' (Sheet, Labour) or 'company' (Rent, Electricity). The same
+    // list serves both sides; this is what keeps office rent out of the head
+    // dropdown on a client's bill.
+    kind: 'kind',
+  },
+  /** Where a company cost was incurred. Absent means company-wide. */
+  offices: {
+    id: 'id',
+    name: 'name',
+    address: 'address',
+    note: 'note',
   },
   projects: {
     id: 'id',
@@ -95,10 +117,29 @@ export const ENTITIES = {
     billNo: 'bill_no',
     usedQty: 'used_qty',
   },
+  /**
+   * What the business costs to run: rent, power, internet, marketing.
+   *
+   * Its own table for the same reason transfers are: a company cost must never
+   * be able to land inside a client's job. Separate tables make that structural
+   * rather than something every query has to remember to exclude.
+   */
+  companyExpenses: {
+    id: 'id',
+    date: 'date',
+    categoryId: 'category_id',
+    officeId: 'office_id',
+    accountId: 'account_id',
+    vendor: 'vendor',
+    description: 'description',
+    amount: 'amount',
+    billNo: 'bill_no',
+    note: 'note',
+  },
 }
 
 /** Entities whose rows can carry attachments. */
-export const ATTACHABLE = ['projects', 'receipts', 'expenses', 'transfers']
+export const ATTACHABLE = ['projects', 'receipts', 'expenses', 'transfers', 'companyExpenses']
 
 // DECIMAL arrives as a string so precision is never lost in transit; the
 // browser wants numbers, and these are the fields to convert.
@@ -108,7 +149,7 @@ const NULLABLE_DATE = new Set(['startDate', 'date'])
 // projectId is deliberately absent: on receipts and expenses the column is NOT
 // NULL, so turning an empty string into NULL there would fail the insert.
 const NULLABLE_REF = new Set([
-  'clientId', 'accountId', 'categoryId',
+  'clientId', 'accountId', 'categoryId', 'officeId',
   'fromAccountId', 'toAccountId',
   'fromProjectId', 'toProjectId', 'userId',
 ])

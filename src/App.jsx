@@ -12,6 +12,8 @@ import Accounts from './pages/Accounts'
 import Inventory from './pages/Inventory'
 import Settings from './pages/Settings'
 import Procurement from './pages/Procurement'
+import Company from './pages/Company'
+import CompanyExpenses from './pages/CompanyExpenses'
 
 /** With a database configured, nothing is reachable until someone signs in. */
 function Gate({ children }) {
@@ -57,16 +59,20 @@ function RoleRoutes() {
 
   return (
     <Routes>
-              <Route element={<Layout />}>
-                <Route index element={<Dashboard />} />
-                <Route path="projects" element={<Projects />} />
-                <Route path="projects/:id" element={<ProjectDetail />} />
-                <Route path="incoming" element={<Incoming />} />
-                <Route path="expenses" element={<Expenses />} />
-                <Route path="accounts" element={<Accounts />} />
-                <Route path="inventory" element={<Inventory />} />
-                <Route path="settings" element={<Settings />} />
-                <Route path="*" element={<Navigate to="/" replace />} />
+      <Route element={<Layout />}>
+        <Route index element={<Dashboard />} />
+        <Route path="projects" element={<Projects />} />
+        <Route path="projects/:id" element={<ProjectDetail />} />
+        <Route path="incoming" element={<Incoming />} />
+        <Route path="expenses" element={<Expenses />} />
+        <Route path="accounts" element={<Accounts />} />
+        <Route path="inventory" element={<Inventory />} />
+        {/* The other half of the business: what it costs to run, whatever
+            jobs are on. */}
+        <Route path="company" element={<Company />} />
+        <Route path="company/expenses" element={<CompanyExpenses />} />
+        <Route path="settings" element={<Settings />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
   )

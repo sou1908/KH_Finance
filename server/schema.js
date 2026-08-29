@@ -24,7 +24,7 @@ import { newId } from './ids.js'
  *     rounds wrong is worthless.
  */
 
-export const SCHEMA_VERSION = 6
+export const SCHEMA_VERSION = 7
 
 export const SCHEMA = {
   app_meta: {
@@ -92,11 +92,35 @@ export const SCHEMA = {
       name: 'VARCHAR(190) NOT NULL',
       unit: "VARCHAR(40) NOT NULL DEFAULT ''",
       tracks_inventory: 'TINYINT(1) NOT NULL DEFAULT 0',
+      // 'project' or 'company'. Defaulting to 'project' is what makes this
+      // column safe to add to a live table: every head that already exists was
+      // a project head, and stays one without a migration.
+      kind: "VARCHAR(20) NOT NULL DEFAULT 'project'",
       updated_at: 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP',
       deleted_at: 'DATETIME NULL',
     },
     primary: '(id)',
     keys: ['KEY idx_categories_live (deleted_at)'],
+  },
+
+  /**
+   * Where a company cost was incurred.
+   *
+   * Two offices today, more later, and some costs — an ad campaign, a software
+   * licence — belong to no office at all. Those carry a NULL office_id and read
+   * as "company-wide" rather than being forced under one of them.
+   */
+  offices: {
+    columns: {
+      id: 'VARCHAR(40) NOT NULL',
+      name: 'VARCHAR(190) NOT NULL',
+      address: "VARCHAR(255) NOT NULL DEFAULT ''",
+      note: 'TEXT NULL',
+      updated_at: 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP',
+      deleted_at: 'DATETIME NULL',
+    },
+    primary: '(id)',
+    keys: ['KEY idx_offices_live (deleted_at)'],
   },
 
   /** Shops and contractors, so a vendor name is picked rather than retyped. */
@@ -275,6 +299,44 @@ export const SCHEMA = {
     ],
   },
 
+  /**
+   * What the business costs to run, regardless of which jobs are on.
+   *
+   * Its own table, not `expenses` with an empty project_id. Every project
+   * figure in the app filters on project_id, and one missed filter would put
+   * office rent inside a client's job cost — the exact failure the separate
+   * `transfers` table was created to prevent. A table that project queries
+   * never name cannot leak into them.
+   *
+   * The test for what belongs here: if you would still pay it with no jobs
+   * running, it is a company cost.
+   */
+  company_expenses: {
+    columns: {
+      id: 'VARCHAR(40) NOT NULL',
+      date: 'DATE NULL',
+      category_id: 'VARCHAR(40) NULL',
+      // NULL means company-wide rather than any one office.
+      office_id: 'VARCHAR(40) NULL',
+      account_id: 'VARCHAR(40) NULL',
+      vendor: "VARCHAR(190) NOT NULL DEFAULT ''",
+      description: 'TEXT NULL',
+      amount: 'DECIMAL(14,2) NOT NULL DEFAULT 0',
+      bill_no: "VARCHAR(80) NOT NULL DEFAULT ''",
+      note: 'TEXT NULL',
+      updated_at: 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP',
+      deleted_at: 'DATETIME NULL',
+    },
+    primary: '(id)',
+    keys: [
+      'KEY idx_company_expenses_date (date)',
+      'KEY idx_company_expenses_category (category_id)',
+      'KEY idx_company_expenses_office (office_id, date)',
+      'KEY idx_company_expenses_account (account_id)',
+      'KEY idx_company_expenses_live (deleted_at)',
+    ],
+  },
+
   attachments: {
     columns: {
       id: 'VARCHAR(40) NOT NULL',
@@ -313,14 +375,30 @@ const SEED_ACCOUNTS = [
   ['acc_company', 'Company A/C', 'company', 'Kalope Homes'],
 ]
 
+// id, name, unit, tracks_inventory, kind
 const SEED_CATEGORIES = [
-  ['cat_sheet', 'Sheet', 'sheet', 1],
-  ['cat_fare', 'Fare', 'trip', 0],
-  ['cat_hardware', 'Hardware', 'pcs', 1],
-  ['cat_labour', 'Labour', 'day', 0],
-  ['cat_designer', 'Designer', 'job', 0],
-  ['cat_electric', 'Electric', 'pcs', 1],
-  ['cat_extra', 'Extra', 'item', 0],
+  ['cat_sheet', 'Sheet', 'sheet', 1, 'project'],
+  ['cat_fare', 'Fare', 'trip', 0, 'project'],
+  ['cat_hardware', 'Hardware', 'pcs', 1, 'project'],
+  ['cat_labour', 'Labour', 'day', 0, 'project'],
+  ['cat_designer', 'Designer', 'job', 0, 'project'],
+  ['cat_electric', 'Electric', 'pcs', 1, 'project'],
+  ['cat_extra', 'Extra', 'item', 0, 'project'],
+
+  // What the business costs to run. Nothing here tracks inventory — none of it
+  // is material that can be left over.
+  ['cat_co_rent', 'Rent', '', 0, 'company'],
+  ['cat_co_electricity', 'Electricity', '', 0, 'company'],
+  ['cat_co_internet', 'Internet & phone', '', 0, 'company'],
+  ['cat_co_marketing', 'Marketing & ads', '', 0, 'company'],
+  ['cat_co_software', 'Software & tools', '', 0, 'company'],
+  ['cat_co_travel', 'Travel & fuel', '', 0, 'company'],
+  ['cat_co_supplies', 'Office supplies', '', 0, 'company'],
+  ['cat_co_repairs', 'Repairs & upkeep', '', 0, 'company'],
+  ['cat_co_fees', 'Professional fees', '', 0, 'company'],
+  ['cat_co_bank', 'Bank charges', '', 0, 'company'],
+  ['cat_co_salary', 'Salary & wages', '', 0, 'company'],
+  ['cat_co_other', 'Other', '', 0, 'company'],
 ]
 
 function createTableSql(table, spec) {
@@ -445,7 +523,10 @@ async function seedMasters(conn) {
     await conn.execute('INSERT IGNORE INTO accounts (id, name, kind, holder) VALUES (?, ?, ?, ?)', row)
   }
   for (const row of SEED_CATEGORIES) {
-    await conn.execute('INSERT IGNORE INTO categories (id, name, unit, tracks_inventory) VALUES (?, ?, ?, ?)', row)
+    await conn.execute(
+      'INSERT IGNORE INTO categories (id, name, unit, tracks_inventory, kind) VALUES (?, ?, ?, ?, ?)',
+      row,
+    )
   }
 }
 

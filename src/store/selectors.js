@@ -7,6 +7,77 @@ export function byProject(rows, projectId) {
   return projectId === 'all' || !projectId ? rows : rows.filter((r) => r.projectId === projectId)
 }
 
+/* ---------------------------------------------------------------- periods --
+
+   A date as the local calendar sees it.
+
+   `toISOString()` converts to UTC first, so in IST (+5:30) local midnight on
+   1 April is 31 March 18:30 UTC and the month would start a day early. Every
+   date in the ledger is a plain calendar date, so it is formatted as one.      */
+
+const isoDate = (d) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+/**
+ * The periods the reports offer.
+ *
+ * The financial year runs April to March, which is the year this business is
+ * actually assessed on — a January-to-December "year" would not match a single
+ * document their accountant produces.
+ */
+export function periodRange(key, today = new Date()) {
+  const y = today.getFullYear()
+  const m = today.getMonth()
+  const monthLabel = (yy, mm) => `${MONTHS[mm]} ${String(yy).slice(2)}`
+
+  switch (key) {
+    case 'this-month':
+      return { from: isoDate(new Date(y, m, 1)), to: isoDate(new Date(y, m + 1, 0)), label: monthLabel(y, m) }
+
+    case 'last-month':
+      return {
+        from: isoDate(new Date(y, m - 1, 1)),
+        to: isoDate(new Date(y, m, 0)),
+        label: monthLabel(m === 0 ? y - 1 : y, m === 0 ? 11 : m - 1),
+      }
+
+    case 'fy': {
+      // April onward belongs to the year that just started; Jan–Mar still
+      // belongs to the one that began last April.
+      const startYear = m >= 3 ? y : y - 1
+      return {
+        from: isoDate(new Date(startYear, 3, 1)),
+        to: isoDate(new Date(startYear + 1, 2, 31)),
+        label: `FY ${startYear}–${String(startYear + 1).slice(2)}`,
+      }
+    }
+
+    default:
+      return { from: '', to: '', label: 'All time' }
+  }
+}
+
+export const PERIODS = [
+  { key: 'this-month', label: 'This month' },
+  { key: 'last-month', label: 'Last month' },
+  { key: 'fy', label: 'Financial year' },
+  { key: 'all', label: 'All time' },
+]
+
+/** Dates are ISO strings, so a string compare is a date compare. */
+export function inPeriod(date, range) {
+  if (!range || (!range.from && !range.to)) return true
+  const d = String(date ?? '')
+  if (!d) return false
+  if (range.from && d < range.from) return false
+  if (range.to && d > range.to) return false
+  return true
+}
+
+const withinPeriod = (rows, range) => (range ? rows.filter((r) => inPeriod(r.date, range)) : rows)
+
 /**
  * The core statement. `remaining` is what the sketch calls "how much is saved":
  * money received minus money spent. Negative means the project is running on
@@ -96,7 +167,10 @@ export function categoryBreakdown(state, projectId) {
   const expenses = byProject(state.expenses, projectId)
   const total = sum(expenses)
 
+  // Project heads only. Company heads can never carry a project bill, so
+  // including them would pad every "heads in use" count with rows fixed at zero.
   return state.categories
+    .filter((c) => (c.kind || 'project') === 'project')
     .map((cat) => {
       const rows = expenses.filter((e) => e.categoryId === cat.id)
       const amount = sum(rows)
@@ -124,32 +198,57 @@ export function accountLedger(state, projectId) {
   const expenses = byProject(state.expenses, projectId)
   const transfers = byProject(state.transfers ?? [], projectId)
 
+  // Company costs belong to no project, so they only count when looking at
+  // everything. Scoped to one job, office rent is simply not that job's money.
+  const wholeFirm = projectId === 'all' || !projectId
+  const company = wholeFirm ? state.companyExpenses ?? [] : []
+
   return state.accounts.map((acc) => {
     const inRows = receipts.filter((r) => r.accountId === acc.id)
     const outRows = expenses.filter((e) => e.accountId === acc.id)
+    const companyRows = company.filter((c) => c.accountId === acc.id)
     const movedIn = transfers.filter((t) => t.toAccountId === acc.id)
     const movedOut = transfers.filter((t) => t.fromAccountId === acc.id)
 
     const inflow = sum(inRows)
     const outflow = sum(outRows)
+    const companyOutflow = sum(companyRows)
     const transferIn = sum(movedIn)
     const transferOut = sum(movedOut)
 
     // An opening balance is a position, not a project's money, so it only
     // applies when looking at everything.
-    const opening = projectId === 'all' ? Number(acc.openingBalance) || 0 : 0
+    const opening = wholeFirm ? Number(acc.openingBalance) || 0 : 0
 
     return {
       ...acc,
       inflow,
       outflow,
+      companyOutflow,
       transferIn,
       transferOut,
       opening,
-      balance: opening + inflow + transferIn - outflow - transferOut,
-      movements: inRows.length + outRows.length + movedIn.length + movedOut.length,
+      balance: opening + inflow + transferIn - outflow - companyOutflow - transferOut,
+      movements:
+        inRows.length + outRows.length + companyRows.length + movedIn.length + movedOut.length,
     }
   })
+}
+
+/**
+ * Money in hand: every account added up.
+ *
+ * The one number the whole app hangs off, and the only one that is true without
+ * qualification — it is what the firm can actually spend tomorrow. It is not
+ * profit, and the reports are careful never to call it that.
+ */
+export function moneyInHand(state) {
+  const rows = accountLedger(state, 'all')
+  return {
+    total: rows.reduce((t, a) => t + a.balance, 0),
+    accounts: rows,
+    negative: rows.filter((a) => a.balance < 0),
+  }
 }
 
 /**
@@ -508,6 +607,20 @@ export function combinedLedger(state, projectId, limit) {
       account: accName[e.accountId] ?? '—',
       amount: Number(e.amount) || 0,
     })),
+    // Company bills belong to no project, so they only appear when looking at
+    // everything. Leaving them out entirely would let a page headed "every
+    // movement" quietly omit the rent.
+    ...(projectId === 'all' || !projectId ? state.companyExpenses ?? [] : []).map((e) => ({
+      id: e.id,
+      kind: 'out',
+      company: true,
+      date: e.date,
+      head: catName[e.categoryId] ?? '—',
+      party: e.vendor,
+      detail: e.description || '',
+      account: accName[e.accountId] ?? '—',
+      amount: Number(e.amount) || 0,
+    })),
   ].sort((a, b) => (a.date === b.date ? b.amount - a.amount : b.date.localeCompare(a.date)))
 
   return limit ? rows.slice(0, limit) : rows
@@ -520,4 +633,108 @@ export function projectSummaries(state) {
     clientName: clientName[p.clientId] ?? 'Unassigned',
     ...projectTotals(state, p.id),
   }))
+}
+
+/* ------------------------------------------------------- the company side --
+
+   What the business costs to run. None of this touches a project figure: the
+   rows live in their own table and no project selector ever reads them.        */
+
+/** Heads that belong to the company side, or the project side. */
+export function headsOfKind(state, kind) {
+  return state.categories.filter((c) => (c.kind || 'project') === kind)
+}
+
+/**
+ * Company costs for a period, split the two ways an owner asks about them:
+ * by what it was spent on, and by which office spent it.
+ */
+export function companyTotals(state, range) {
+  const rows = withinPeriod(state.companyExpenses ?? [], range)
+  const total = sum(rows)
+
+  const catName = Object.fromEntries(state.categories.map((c) => [c.id, c.name]))
+  const officeName = Object.fromEntries((state.offices ?? []).map((o) => [o.id, o.name]))
+
+  const group = (keyOf, nameOf) => {
+    const buckets = new Map()
+    for (const row of rows) {
+      const key = keyOf(row)
+      if (!buckets.has(key)) buckets.set(key, { id: key, name: nameOf(key), amount: 0, count: 0 })
+      const bucket = buckets.get(key)
+      bucket.amount += Number(row.amount) || 0
+      bucket.count += 1
+    }
+    return [...buckets.values()]
+      .map((b) => ({ ...b, share: total > 0 ? b.amount / total : 0 }))
+      .sort((a, b) => b.amount - a.amount)
+  }
+
+  return {
+    rows,
+    total,
+    count: rows.length,
+    byHead: group(
+      (r) => r.categoryId || '',
+      (id) => catName[id] ?? 'Unfiled',
+    ),
+    // An empty office is not missing data — it is a cost that belongs to the
+    // firm rather than to either office, like an ad campaign.
+    byOffice: group(
+      (r) => r.officeId || '',
+      (id) => officeName[id] ?? 'Company-wide',
+    ),
+  }
+}
+
+/**
+ * What moved through the firm's hands in a period, and what it left behind.
+ *
+ * This is the number the two dashboards feed. It is deliberately a MOVEMENT,
+ * never called profit: a month where a client pays an advance looks enormous
+ * and the month the work is done looks terrible, yet nothing about the business
+ * changed. Accumulated, the swings cancel and it lands exactly on money in
+ * hand — which is the figure that means something on its own.
+ */
+export function moneyMovement(state, range) {
+  const clientMoney = sum(withinPeriod(state.receipts, range))
+  const projectSpend = sum(withinPeriod(state.expenses, range))
+  const companySpend = sum(withinPeriod(state.companyExpenses ?? [], range))
+
+  return {
+    clientMoney,
+    projectSpend,
+    companySpend,
+    spend: projectSpend + companySpend,
+    net: clientMoney - projectSpend - companySpend,
+  }
+}
+
+/**
+ * The last twelve months of movement, for the trend on the company dashboard.
+ * Months with nothing in them are still returned, so the shape of a quiet month
+ * is visible rather than collapsed out of the chart.
+ */
+export function monthlyCompanyFlow(state, months = 12, today = new Date()) {
+  const out = []
+
+  for (let back = months - 1; back >= 0; back -= 1) {
+    const d = new Date(today.getFullYear(), today.getMonth() - back, 1)
+    const range = {
+      from: isoDate(d),
+      to: isoDate(new Date(d.getFullYear(), d.getMonth() + 1, 0)),
+    }
+    const flow = moneyMovement(state, range)
+    out.push({
+      month: range.from.slice(0, 7),
+      label: `${MONTHS[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`,
+      // Named so the row drops straight into FlowChart, which plots money in
+      // against money out. Here "out" is everything: jobs and the office both.
+      incoming: flow.clientMoney,
+      expenditure: flow.spend,
+      ...flow,
+    })
+  }
+
+  return out
 }

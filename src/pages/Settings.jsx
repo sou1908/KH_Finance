@@ -4,6 +4,7 @@ import MasterDialog from '../components/MasterDialog'
 import UsersPanel from '../components/UsersPanel'
 import { ENTITIES, WITH_FILES, useApp } from '../store/AppStore'
 import { getFile, humanSize, putFile, storageEstimate } from '../data/files'
+import { headsOfKind } from '../store/selectors'
 import { money } from '../lib/format'
 
 /**
@@ -80,6 +81,7 @@ export default function Settings() {
       [state.projects.length, 'project'],
       [state.receipts.length, 'receipt'],
       [state.expenses.length, 'expense'],
+      [state.companyExpenses.length, 'company expense'],
       [state.transfers.length, 'transfer'],
       [allAttachments.length, 'attached file'],
     ]
@@ -130,13 +132,15 @@ export default function Settings() {
         <div>
           <span className="eyebrow">Setup</span>
           <h1>Settings</h1>
-          <div className="crumb">Heads, accounts and clients — change these and the whole app follows.</div>
+          <div className="crumb">
+            Heads, offices, accounts and clients — change these and the whole app follows.
+          </div>
         </div>
       </div>
 
       <div className="stack">
         <Panel
-          title="Expenditure heads"
+          title="Project heads"
           action={
             <button className="btn tiny" onClick={() => setDialog({ kind: 'category' })}>
               Add head
@@ -156,7 +160,7 @@ export default function Settings() {
                 </tr>
               </thead>
               <tbody>
-                {state.categories.map((c) => {
+                {headsOfKind(state, 'project').map((c) => {
                   const count = state.expenses.filter((e) => e.categoryId === c.id).length
                   // Items belong to a head. Deleting the head would strand them
                   // where no screen can reach them, since the Items panel only
@@ -204,6 +208,9 @@ export default function Settings() {
           </div>
         </Panel>
 
+        <CompanyHeadsPanel state={state} setDialog={setDialog} />
+        <OfficesPanel state={state} setDialog={setDialog} />
+
         <Panel
           title="Accounts"
           action={
@@ -229,6 +236,7 @@ export default function Settings() {
                 {state.accounts.map((a) => {
                   const count =
                     state.expenses.filter((e) => e.accountId === a.id).length +
+                    state.companyExpenses.filter((e) => e.accountId === a.id).length +
                     state.receipts.filter((r) => r.accountId === a.id).length
                   return (
                     <tr key={a.id}>
@@ -430,6 +438,171 @@ export default function Settings() {
 }
 
 /**
+ * Heads for the company side, kept in a panel of their own.
+ *
+ * Same table as the project heads, deliberately a separate list on screen. One
+ * combined list would put "Rent" in the dropdown on a client's bill and
+ * "Plywood" in the dropdown on a power bill, and the split is the only thing
+ * keeping company costs out of project figures.
+ */
+function CompanyHeadsPanel({ state, setDialog }) {
+  const heads = headsOfKind(state, 'company')
+
+  return (
+    <Panel
+      title="Company heads"
+      action={
+        <button className="btn tiny" onClick={() => setDialog({ kind: 'companyHead' })}>
+          Add company head
+        </button>
+      }
+      flush
+    >
+      {heads.length === 0 ? (
+        <Empty
+          title="No company heads yet"
+          action={
+            <button className="btn primary" onClick={() => setDialog({ kind: 'companyHead' })}>
+              Add the first one
+            </button>
+          }
+        >
+          These are what the business costs to run — rent, electricity, internet, marketing. The test: if you would
+          still pay it with no jobs running, it belongs here rather than under a project head.
+        </Empty>
+      ) : (
+        <div className="table-wrap">
+          <table className="data">
+            <thead>
+              <tr>
+                <th>Head</th>
+                <th className="right">Bills filed</th>
+                <th className="right col-optional">Total spent</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {heads.map((c) => {
+                const rows = state.companyExpenses.filter((e) => e.categoryId === c.id)
+                const spent = rows.reduce((t, e) => t + (Number(e.amount) || 0), 0)
+                return (
+                  <tr key={c.id}>
+                    <td style={{ fontWeight: 500 }}>{c.name}</td>
+                    <td className="amount">{rows.length}</td>
+                    <td className="amount col-optional">{spent ? money(spent) : '—'}</td>
+                    <td>
+                      <div className="row-actions">
+                        <button className="btn ghost tiny" onClick={() => setDialog({ kind: 'companyHead', row: c })}>
+                          Edit
+                        </button>
+                        <button
+                          className="btn ghost tiny danger"
+                          disabled={rows.length > 0}
+                          title={
+                            rows.length > 0
+                              ? `${rows.length} bill${rows.length === 1 ? '' : 's'} are filed under this head. Reassign them first.`
+                              : 'Remove this head'
+                          }
+                          onClick={() => state.remove('categories', c.id)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Panel>
+  )
+}
+
+/**
+ * Offices, so two premises can be compared against each other.
+ *
+ * Nothing is seeded here. An invented office name would be indistinguishable
+ * from a real one after a week, and a cost filed against the wrong premises is
+ * worse than one filed against none.
+ */
+function OfficesPanel({ state, setDialog }) {
+  return (
+    <Panel
+      title="Offices"
+      action={
+        <button className="btn tiny" onClick={() => setDialog({ kind: 'office' })}>
+          Add office
+        </button>
+      }
+      flush
+    >
+      {state.offices.length === 0 ? (
+        <Empty
+          title="No offices set up"
+          action={
+            <button className="btn primary" onClick={() => setDialog({ kind: 'office' })}>
+              Add your first office
+            </button>
+          }
+        >
+          Add each premises and every company bill can be charged to one, so you can see what each is costing you.
+          Costs that belong to no single office — an ad campaign, a software licence — stay marked company-wide.
+        </Empty>
+      ) : (
+        <div className="table-wrap">
+          <table className="data">
+            <thead>
+              <tr>
+                <th>Office</th>
+                <th className="col-optional">Address</th>
+                <th className="right">Bills filed</th>
+                <th className="right col-optional">Total spent</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {state.offices.map((o) => {
+                const rows = state.companyExpenses.filter((e) => e.officeId === o.id)
+                const spent = rows.reduce((t, e) => t + (Number(e.amount) || 0), 0)
+                return (
+                  <tr key={o.id}>
+                    <td style={{ fontWeight: 500 }}>{o.name}</td>
+                    <td className="note col-optional">{o.address || '—'}</td>
+                    <td className="amount">{rows.length}</td>
+                    <td className="amount col-optional">{spent ? money(spent) : '—'}</td>
+                    <td>
+                      <div className="row-actions">
+                        <button className="btn ghost tiny" onClick={() => setDialog({ kind: 'office', row: o })}>
+                          Edit
+                        </button>
+                        <button
+                          className="btn ghost tiny danger"
+                          disabled={rows.length > 0}
+                          title={
+                            rows.length > 0
+                              ? `${rows.length} bill${rows.length === 1 ? '' : 's'} are charged to this office. Reassign them first.`
+                              : 'Remove this office'
+                          }
+                          onClick={() => state.remove('offices', o.id)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Panel>
+  )
+}
+
+/**
  * Items, one head at a time.
  *
  * Choosing the head first is not decoration: an item only means something under
@@ -440,7 +613,10 @@ export default function Settings() {
 function ItemsPanel({ state, setDialog }) {
   const [headId, setHeadId] = useState('')
 
-  const head = state.categories.find((c) => c.id === headId)
+  // Project heads only — an item is a thing bought for a job, and nothing is
+  // ever picked from a list when recording the electricity bill.
+  const heads = headsOfKind(state, 'project')
+  const head = heads.find((c) => c.id === headId)
   const items = state.items.filter((i) => i.categoryId === headId)
   const countFor = (id) => state.items.filter((i) => i.categoryId === id).length
 
@@ -459,7 +635,7 @@ function ItemsPanel({ state, setDialog }) {
           <label htmlFor="items-head">Head</label>
           <select id="items-head" value={headId} onChange={(e) => setHeadId(e.target.value)}>
             <option value="">Choose a head to see its items</option>
-            {state.categories.map((c) => (
+            {heads.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name} ({countFor(c.id)})
               </option>

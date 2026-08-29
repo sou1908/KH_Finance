@@ -370,6 +370,49 @@ button.sync-pill:hover { border-color: rgba(255, 255, 255, 0.3); color: #fff; }
 
 .quick-add { display: flex; gap: 8px; flex-wrap: wrap; }
 
+/* Money in hand, riding along on every screen. It sits quietly beside the
+   project picker rather than competing with the page's own headline figures —
+   it is context, not the answer to whatever question the page is asking. */
+.hand {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 5px 12px;
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  background: var(--paper);
+  white-space: nowrap;
+}
+.hand .figure { font-size: 14px; font-weight: 600; color: var(--patina); }
+.hand .figure.neg { color: var(--ember); }
+.topbar h1.figure { color: var(--patina); }
+.topbar h1.figure.neg { color: var(--ember); }
+
+/* The switch between the two halves of the business. One control, two states —
+   never two buttons where one looks disabled. */
+.seg {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  background: var(--paper);
+}
+.seg-btn {
+  padding: 6px 14px;
+  border-radius: calc(var(--r) - 3px);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-2);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.seg-btn:hover { color: var(--ink); }
+.seg-btn.is-active {
+  background: var(--brand-deep);
+  color: #fff;
+}
+
 .page { padding: 24px 28px 56px; flex: 1; }
 
 /* Pages that carry their own header (project, settings) bleed it to the edges

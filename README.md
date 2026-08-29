@@ -10,6 +10,7 @@ npm start          # app + API on one port — http://localhost:3000
 npm run test:e2e        # 32 API checks against a throwaway database
 npm run test:roles      # what a procurement login is and isn't sent
 npm run test:selectors  # money arithmetic — no database needed
+npm run test:company    # company costs never reach a project figure
 ```
 
 ## One deployment, two halves
@@ -31,20 +32,37 @@ frontend environment variable is needed.
 Settings has **Download backup** / **Restore from backup** in both modes, and
 the backup carries the attached files inside it.
 
-## The six verticals
+## Two halves, one pool
+
+The business has a project side and a company side, and they run on different
+clocks — company costs are steady and monthly, job margins land in lumps when
+jobs finish. So they get separate dashboards rather than one blended figure,
+and they meet at **money in hand**, which sits in the top bar on every screen.
+
+```
+              MONEY IN HAND          every account added up
+                     │
+       ┌─────────────┴─────────────┐
+  PROJECT DASHBOARD          COMPANY DASHBOARD
+  client money in            office A / office B
+  job costs                  rent · power · wifi
+  margin per job             marketing · software
+  material in stock
+```
 
 | Vertical | What it holds |
 |---|---|
-| **Projects** | The container. Every rupee is filed under one. Carries the quoted value, which is what makes margin measurable. |
+| **Projects** | The container. Every project rupee is filed under one. Carries the quoted value, which is what makes margin measurable. |
 | **Incoming** | Client payments, each tagged with the account it landed in — cash, a personal account, or the company account. |
-| **Expenditure** | Bills under seven heads: Sheet, Fare, Hardware, Labour, Designer, Electric, Extra. Each records which account paid. |
-| **Accounts** | Reconciliation. Money arrives in four channels and leaves from them; this is where the two sides meet, and where "personal money tied up in jobs" becomes visible. |
-| **Inventory** | Bought quantity minus used quantity, for heads marked stock-tracked. Leftovers are stock, not loss. |
-| **Settings** | Heads, accounts and clients as editable data — so the chart of accounts changes without a deploy. |
+| **Expenditure** | Job bills under the project heads: Sheet, Fare, Hardware, Labour, Designer, Electric, Extra. Each records which account paid. |
+| **Company** | What the business costs to run whatever jobs are on — rent, power, internet, marketing, software. Split by office, with a company-wide bucket for what belongs to neither. |
+| **Accounts** | Reconciliation. Both sides leave from the same accounts, so this is where they meet, and where "personal money tied up in jobs" becomes visible. |
+| **Inventory** | Bought quantity minus what has left the pool, for heads marked stock-tracked. Leftovers are stock, not loss. |
+| **Settings** | Heads, offices, accounts and clients as editable data — so the chart of accounts changes without a deploy. |
 
-Projects, receipts and expenses all take **file attachments** — the signed
-quotation, a photo of each bill, a bank screenshot. Every file filed against a
-job collects in that project's Documents panel.
+Projects, receipts, expenses and company bills all take **file attachments** —
+the signed quotation, a photo of each bill, a bank screenshot. Every file filed
+against a job collects in that project's Documents panel.
 
 ## How the numbers work
 
@@ -62,6 +80,44 @@ that's the only file to audit.
   job was worth taking; "remaining" only tracks cash position.
 - **Inventory left** = what a purchase still has standing, per project, from the
   `movements` ledger × the purchase rate.
+- **Money in hand** = every account added up. The one figure that is true with no
+  qualification: what the firm can spend tomorrow.
+- **Movement** = money in − job costs − company costs, over a period. Never
+  called profit; see below.
+
+### Why the monthly figure is a movement, not profit
+
+A month where a client pays a ₹7L advance looks brilliant and the month the work
+gets done looks terrible, though nothing about the business changed in between.
+Read alone, that number would be worse than useless.
+
+It is safe because it **accumulates**. Add up every month's movement, start from
+the opening balances, and you land exactly on money in hand — the swings cancel.
+So the app shows the movement as *"money in hand went up ₹4,20,000"* and reserves
+the word profit for what it means. `npm run test:company` asserts the
+accumulation lands on the balance to the rupee.
+
+Loans are the one thing that would break the reading: borrow ₹5L and a month you
+burned ₹5.2L looks like it broke even. Borrowing, EMIs and lending therefore get
+their own rows rather than being blended into either side. *(Not built yet —
+phase 4.)*
+
+### Why company costs are their own table
+
+`company_expenses`, not `expenses` with an empty `project_id`. Every project
+figure filters on `project_id`, and one missed filter would put office rent
+inside a client's job cost — the exact failure the separate `transfers` table
+was created to prevent. A table that project queries never name cannot leak into
+them. Heads carry a `kind` of `project` or `company` for the same reason: rent
+must never be offerable on a client's bill.
+
+The test for which side something belongs on, written into the UI: **if you
+would stop paying it the day the job ends it is a project cost; if you would
+still pay it with no jobs running, it is a company cost.**
+
+Overheads are deliberately **not** spread onto projects. Deciding whether
+Kothari owes 40% or 60% of the office rent has no right answer, so project
+margin is stated before overheads and company profit after.
 
 ### Why cost follows the material
 
@@ -176,6 +232,17 @@ Columns are only ever added; never dropped, never retyped.
 Dialect rules, because the server version is not ours to choose: no `DEFAULT` on
 a `TEXT` column, no `DEFAULT` that calls a function except `CURRENT_TIMESTAMP`
 on a datetime, and money is always `DECIMAL`, never `FLOAT`.
+
+A column added to a live table must carry a `DEFAULT` that is correct for every
+row already there. `categories.kind` defaults to `'project'` precisely because
+every head that already existed was one, so v7 needs no migration step.
+
+Adding a whole entity means one entry in [`server/schema.js`](server/schema.js),
+one in [`server/entities.js`](server/entities.js), and one key in `EMPTY` in
+[`src/store/AppStore.jsx`](src/store/AppStore.jsx). Table names are derived from
+the entity key by `tableOf` (`companyExpenses` → `company_expenses`), so there is
+no third list to keep in step. Procurement is excluded from a new entity by
+default: `filterStateFor` only ever sends what `PROCUREMENT_FIELDS` names.
 
 ## Mobile
 

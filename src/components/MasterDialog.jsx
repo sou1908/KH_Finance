@@ -6,27 +6,34 @@ import { ACCOUNT_KINDS } from '../data/masters'
 import { money } from '../lib/format'
 
 const DEFAULTS = {
-  category: { name: '', unit: '', tracksInventory: false },
+  category: { name: '', unit: '', tracksInventory: false, kind: 'project' },
+  // Same table, same form — only the side it lands on differs.
+  companyHead: { name: '', unit: '', tracksInventory: false, kind: 'company' },
   account: { name: '', kind: ACCOUNT_KINDS.CASH, holder: '', openingBalance: 0 },
   client: { name: '', phone: '', note: '' },
   vendor: { name: '', phone: '', note: '' },
   item: { name: '', categoryId: '', unit: '', rate: '', note: '' },
+  office: { name: '', address: '', note: '' },
 }
 
 const ENTITY = {
   category: 'categories',
+  companyHead: 'categories',
   account: 'accounts',
   client: 'clients',
   vendor: 'vendors',
   item: 'items',
+  office: 'offices',
 }
 
 const NOUN = {
   category: 'head',
+  companyHead: 'company head',
   account: 'account',
   client: 'client',
   vendor: 'vendor',
   item: 'item',
+  office: 'office',
 }
 
 /**
@@ -57,6 +64,12 @@ export default function MasterDialog({ kind, row, presets, onClose }) {
 
     const record = { ...form, name: String(form.name).trim() }
 
+    // Which side of the app a head belongs to is set by which panel opened this
+    // form, never by the form itself. An editable dropdown here would let a
+    // head be flipped after bills are already filed under it.
+    if (kind === 'category') record.kind = 'project'
+    if (kind === 'companyHead') record.kind = 'company'
+
     if (kind === 'account') {
       record.openingBalance = Number(form.openingBalance) || 0
       record.kind = String(form.kind || 'cash').trim().toLowerCase()
@@ -78,7 +91,11 @@ export default function MasterDialog({ kind, row, presets, onClose }) {
       subtitle={
         kind === 'account'
           ? 'Every receipt and every bill is filed against one of these.'
-          : undefined
+          : kind === 'companyHead'
+            ? 'For costs the business carries whether or not any job is running.'
+            : kind === 'office'
+              ? 'Somewhere costs are incurred, so you can compare one against another.'
+              : undefined
       }
       onClose={onClose}
       footer={
@@ -97,10 +114,29 @@ export default function MasterDialog({ kind, row, presets, onClose }) {
       <div className="dialog-body">
         <Field
           label="Name"
-          hint={kind === 'account' ? 'What you call it day to day — "Cash", "SBI Current", "Personal — A".' : undefined}
+          hint={
+            kind === 'account'
+              ? 'What you call it day to day — "Cash", "SBI Current", "Personal — A".'
+              : kind === 'companyHead'
+                ? 'What the money went on — "Rent", "Electricity", "Marketing".'
+                : kind === 'office'
+                  ? 'What you call the place — "Andheri office", "Main office".'
+                  : undefined
+          }
         >
           <input value={form.name} onChange={set('name')} autoFocus />
         </Field>
+
+        {kind === 'office' && (
+          <>
+            <Field label="Address">
+              <input value={form.address} onChange={set('address')} placeholder="Optional" />
+            </Field>
+            <Field label="Note">
+              <input value={form.note} onChange={set('note')} placeholder="Which team sits here, anything worth knowing" />
+            </Field>
+          </>
+        )}
 
         {kind === 'category' && (
           <>

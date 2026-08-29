@@ -1,4 +1,4 @@
-import { ATTACHABLE, ENTITIES, normalise, rowToJson } from './entities.js'
+import { ATTACHABLE, ENTITIES, normalise, rowToJson, tableOf } from './entities.js'
 
 /**
  * Applying the browser's queued operations.
@@ -13,9 +13,11 @@ export async function loadState(conn) {
   for (const [entity, fields] of Object.entries(ENTITIES)) {
     // Dated rows sort by date; masters sort by name. Getting this wrong is not
     // a cosmetic problem — ordering by a column the table does not have throws.
-    const dated = ['receipts', 'expenses', 'transfers', 'movements'].includes(entity)
+    const dated = ['receipts', 'expenses', 'transfers', 'movements', 'companyExpenses'].includes(entity)
     const order = dated ? '`date` DESC, id DESC' : 'name ASC'
-    const [rows] = await conn.query(`SELECT * FROM \`${entity}\` WHERE deleted_at IS NULL ORDER BY ${order}`)
+    const [rows] = await conn.query(
+      `SELECT * FROM \`${tableOf(entity)}\` WHERE deleted_at IS NULL ORDER BY ${order}`,
+    )
     state[entity] = rows.map((row) => rowToJson(row, fields))
   }
 
@@ -94,7 +96,7 @@ async function upsert(conn, entity, row, userId) {
 
   // deleted_at is cleared because saving a row means it exists again.
   await conn.execute(
-    `INSERT INTO \`${entity}\` (${columnList}) VALUES (${placeholders})
+    `INSERT INTO \`${tableOf(entity)}\` (${columnList}) VALUES (${placeholders})
      ON DUPLICATE KEY UPDATE ${updates}, deleted_at = NULL`,
     values,
   )
@@ -139,7 +141,7 @@ async function syncAttachments(conn, entity, rowId, list) {
 async function softDelete(conn, entity, id, userId) {
   if (!ENTITIES[entity] || !id) throw new Error(`Cannot delete from ${entity}`)
   // Nothing is ever really deleted; a mis-click stays recoverable.
-  await conn.execute(`UPDATE \`${entity}\` SET deleted_at = NOW() WHERE id = ?`, [id])
+  await conn.execute(`UPDATE \`${tableOf(entity)}\` SET deleted_at = NOW() WHERE id = ?`, [id])
   await audit(conn, userId, 'remove', entity, id, null)
 }
 
@@ -164,7 +166,7 @@ async function removeProject(conn, id, userId) {
 /** Backs "erase everything" and restoring a backup. Replaces the whole ledger. */
 async function replaceAll(conn, state, userId) {
   for (const entity of Object.keys(ENTITIES)) {
-    await conn.query(`UPDATE \`${entity}\` SET deleted_at = NOW() WHERE deleted_at IS NULL`)
+    await conn.query(`UPDATE \`${tableOf(entity)}\` SET deleted_at = NOW() WHERE deleted_at IS NULL`)
   }
   for (const entity of Object.keys(ENTITIES)) {
     for (const row of state[entity] ?? []) {

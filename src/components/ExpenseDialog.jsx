@@ -90,12 +90,16 @@ export default function ExpenseDialog({ existing, lockedProject, onClose }) {
     () => Boolean(existing?.vendor) && !(vendors ?? []).some((v) => v.name === existing.vendor),
   )
 
+  // A client's bill can only carry a project head. Office rent must never be
+  // offerable here — that is the whole point of the two lists being separate.
+  const projectHeads = categories.filter((c) => (c.kind || 'project') === 'project')
+
   const category = categories.find((c) => c.id === bill.categoryId)
   const tracksStock = Boolean(category?.tracksInventory)
   const isEdit = Boolean(existing)
 
   // Named rather than hardcoded, since the heads are editable in Settings.
-  const stockHeads = categories.filter((c) => c.tracksInventory).map((c) => c.name)
+  const stockHeads = projectHeads.filter((c) => c.tracksInventory).map((c) => c.name)
 
   // The saved items for whichever head is selected.
   const headItems = (savedItems ?? []).filter((i) => i.categoryId === bill.categoryId)
@@ -299,7 +303,7 @@ export default function ExpenseDialog({ existing, lockedProject, onClose }) {
           <Field label="Head" hint={items.length > 1 ? 'Applies to every item below' : undefined}>
             <select value={bill.categoryId} onChange={pickCategory}>
               <option value="">Select head</option>
-              {categories.map((c) => (
+              {projectHeads.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
                 </option>
