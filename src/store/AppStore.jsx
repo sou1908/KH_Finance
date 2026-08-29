@@ -26,6 +26,9 @@ const EMPTY = {
   // internet, marketing. Never attached to a project, so it can never land
   // inside a client's job cost.
   companyExpenses: [],
+  // Money expected to move on a date — EMIs, rent, whoever owes you. The only
+  // list in the app about the future rather than what already happened.
+  commitments: [],
   // Money moved between our own accounts. Never income, never spending.
   transfers: [],
   // What happened to material after it was bought: used at site, moved to

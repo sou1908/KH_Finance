@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import Panel, { Empty } from '../components/Panel'
 import Measure from '../components/Measure'
 import FlowChart from '../components/FlowChart'
+import DueBanner from '../components/DueBanner'
 import { useApp } from '../store/AppStore'
 import {
   PERIODS,
@@ -63,6 +64,8 @@ export default function Company() {
           </div>
         </div>
       </div>
+
+      <DueBanner />
 
       <div className="toolbar" style={{ marginBottom: 0 }}>
         <span className="eyebrow">Period</span>

@@ -44,10 +44,11 @@ const MODES = {
         items: [
           { to: '/company', label: 'Dashboard', tick: '00', end: true },
           { to: '/company/expenses', label: 'Expenses', tick: '01' },
+          { to: '/company/due', label: "What's due", tick: '02' },
         ],
       },
-      { group: 'Money', items: [{ to: '/accounts', label: 'Accounts', tick: '02' }] },
-      { group: 'Setup', items: [{ to: '/company/settings', label: 'Settings', tick: '03' }] },
+      { group: 'Money', items: [{ to: '/accounts', label: 'Accounts', tick: '03' }] },
+      { group: 'Setup', items: [{ to: '/company/settings', label: 'Settings', tick: '04' }] },
     ],
   },
 }

@@ -24,7 +24,7 @@ import { newId } from './ids.js'
  *     rounds wrong is worthless.
  */
 
-export const SCHEMA_VERSION = 8
+export const SCHEMA_VERSION = 9
 
 export const SCHEMA = {
   app_meta: {
@@ -331,6 +331,10 @@ export const SCHEMA = {
       description: 'TEXT NULL',
       amount: 'DECIMAL(14,2) NOT NULL DEFAULT 0',
       bill_no: "VARCHAR(80) NOT NULL DEFAULT ''",
+      // Which commitment this bill settles, when it settles one. Gives an EMI
+      // an audit trail and makes "what is left to repay" a sum rather than a
+      // number somebody maintains by hand.
+      commitment_id: 'VARCHAR(40) NULL',
       note: 'TEXT NULL',
       updated_at: 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP',
       deleted_at: 'DATETIME NULL',
@@ -338,10 +342,62 @@ export const SCHEMA = {
     primary: '(id)',
     keys: [
       'KEY idx_company_expenses_date (date)',
+      'KEY idx_company_expenses_commitment (commitment_id)',
       'KEY idx_company_expenses_category (category_id)',
       'KEY idx_company_expenses_office (office_id, date)',
       'KEY idx_company_expenses_account (account_id)',
       'KEY idx_company_expenses_live (deleted_at)',
+    ],
+  },
+
+  /**
+   * Money expected to move on a date — the only table in the app about the
+   * future rather than the past.
+   *
+   * One shape covers all of it, because an EMI, the rent, the wifi bill and a
+   * friend who owes you money are the same sentence: "₹X, from or to someone,
+   * on this date, and then again next month." Four tables would be four sets of
+   * date arithmetic to get wrong.
+   *
+   * A commitment records nothing about money that has actually moved. Settling
+   * one writes a real company expense (or, for money coming back, whatever the
+   * movement really was) and stamps last_settled_on here. The ledger stays the
+   * single record of what happened; this only says what is coming.
+   */
+  commitments: {
+    columns: {
+      id: 'VARCHAR(40) NOT NULL',
+      // 'payable' (you owe it) or 'receivable' (you are owed it).
+      kind: "VARCHAR(20) NOT NULL DEFAULT 'payable'",
+      name: 'VARCHAR(190) NOT NULL',
+      party: "VARCHAR(190) NOT NULL DEFAULT ''",
+      // 0 when the amount varies each time, like an electricity bill.
+      amount: 'DECIMAL(14,2) NOT NULL DEFAULT 0',
+      category_id: 'VARCHAR(40) NULL',
+      office_id: 'VARCHAR(40) NULL',
+      account_id: 'VARCHAR(40) NULL',
+      // 0 = one-off, due on start_date. 1 = monthly, 3 = quarterly, 12 = yearly.
+      every_months: 'INT NOT NULL DEFAULT 1',
+      day_of_month: 'INT NOT NULL DEFAULT 1',
+      start_date: 'DATE NULL',
+      // An EMI's last instalment. NULL means it runs until switched off.
+      end_date: 'DATE NULL',
+      // What was borrowed or lent in the first place, so what is left to repay
+      // can be shown. 0 for an ordinary recurring bill.
+      total_amount: 'DECIMAL(14,2) NOT NULL DEFAULT 0',
+      // How many days ahead to start warning.
+      remind_days: 'INT NOT NULL DEFAULT 3',
+      last_settled_on: 'DATE NULL',
+      active: 'TINYINT(1) NOT NULL DEFAULT 1',
+      note: 'TEXT NULL',
+      updated_at: 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP',
+      deleted_at: 'DATETIME NULL',
+    },
+    primary: '(id)',
+    keys: [
+      'KEY idx_commitments_active (active, deleted_at)',
+      'KEY idx_commitments_kind (kind)',
+      'KEY idx_commitments_live (deleted_at)',
     ],
   },
 

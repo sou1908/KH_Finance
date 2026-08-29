@@ -11,6 +11,7 @@ npm run test:e2e        # 32 API checks against a throwaway database
 npm run test:roles      # what a procurement login is and isn't sent
 npm run test:selectors  # money arithmetic — no database needed
 npm run test:company    # company costs never reach a project figure
+npm run test:due        # due-date arithmetic, including month ends
 ```
 
 ## One deployment, two halves
@@ -63,6 +64,7 @@ to the remembered choice on Accounts and Settings, which belong to neither.
 | **Incoming** | Client payments, each tagged with the account it landed in — cash, a personal account, or the company account. |
 | **Expenditure** | Job bills under the project heads: Sheet, Fare, Hardware, Labour, Designer, Electric, Extra. Each records which account paid. |
 | **Company** | What the business costs to run whatever jobs are on — rent, power, internet, marketing, software. Split by office, with a company-wide bucket for what belongs to neither. |
+| **What's due** | The only screen about the future. EMIs, rent, bills and anyone who owes you, each warning you as many days ahead as you set. |
 | **Accounts** | Reconciliation. Both sides leave from the same accounts, so this is where they meet, and where "personal money tied up in jobs" becomes visible. |
 | **Inventory** | Bought quantity minus what has left the pool, for heads marked stock-tracked. Leftovers are stock, not loss. |
 | **Settings** | One page per side. Project settings holds job heads, items, vendors and clients; Company settings holds company heads, payees and offices. Accounts, logins and the backup are shared and appear under both. |
@@ -108,6 +110,36 @@ Loans are the one thing that would break the reading: borrow ₹5L and a month y
 burned ₹5.2L looks like it broke even. Borrowing, EMIs and lending therefore get
 their own rows rather than being blended into either side. *(Not built yet —
 phase 4.)*
+
+### Reminders, and why they are not payments
+
+`commitments` is the only table about the future. One shape covers an EMI, the
+rent, the wifi bill and a friend who owes you money, because they are the same
+sentence: *an amount, a party, a date, and how often it comes round again.*
+Four tables would have been four sets of date arithmetic to get wrong.
+
+A commitment holds **no record of money that moved**. Settling one opens the
+ordinary company expense form, prefilled and fully editable — the rent may have
+gone up, and the bill in hand is what is true. Only once that bill is saved is
+`last_settled_on` stamped, so a cancelled form leaves the reminder standing. The
+ledger stays the single record of what happened; this only says what is coming.
+
+The bill carries `commitment_id` back, which makes *"what is left on the loan"* a
+sum over real bills rather than a figure somebody maintains by hand.
+
+Two things the tests pin down, both of which were wrong first:
+
+- **The 31st.** Rent due on the 31st still falls due in February, on the 28th or
+  29th. Clamping to the month's last day is what stops those months being
+  silently skipped.
+- **A missed instalment is counted against today, never against the horizon.**
+  Counting the whole pending list made "how many were missed" grow whenever the
+  caller looked further ahead — not a property a count of the past should have.
+
+Reminders are **in-app only**. Nothing is emailed or messaged, because a timer
+inside the Node process would not fire: Passenger shuts the app down when idle.
+Pushing them out needs Hostinger's cron calling a daily endpoint, which is a
+separate piece of work.
 
 ### Why company costs are their own table
 

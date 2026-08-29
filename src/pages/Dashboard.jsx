@@ -3,6 +3,7 @@ import Panel, { Empty } from '../components/Panel'
 import Measure from '../components/Measure'
 import Caliper from '../components/Caliper'
 import FlowChart from '../components/FlowChart'
+import DueBanner from '../components/DueBanner'
 import { useApp } from '../store/AppStore'
 import { useScope } from '../store/ScopeContext'
 import {
@@ -66,6 +67,10 @@ export default function Dashboard() {
           <div className="crumb">Client money in, job costs out, and what each job is earning.</div>
         </div>
       </div>
+
+      {/* An EMI falling due is worth knowing about on this side too — the money
+          leaves the same accounts these jobs are funded from. */}
+      <DueBanner />
 
       <div className="grid cols-3">
         <Measure

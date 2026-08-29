@@ -726,6 +726,145 @@ export function moneyMovement(state, range) {
   }
 }
 
+/* ----------------------------------------------------------- what is due --
+
+   The only arithmetic in the app about the future. Everything else records
+   what already happened.                                                      */
+
+export const todayISO = () => isoDate(new Date())
+
+/** Days from a to b, as whole calendar days. Negative when b is in the past. */
+export function daysBetween(a, b) {
+  const [ay, am, ad] = String(a).split('-').map(Number)
+  const [by, bm, bd] = String(b).split('-').map(Number)
+  // UTC on both sides so a daylight-saving shift can never make it 0.99 days.
+  return Math.round((Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad)) / 86400000)
+}
+
+export function addDays(iso, days) {
+  const [y, m, d] = String(iso).split('-').map(Number)
+  return isoDate(new Date(y, m - 1, d + days))
+}
+
+/**
+ * Every date a commitment falls due, between two dates.
+ *
+ * The 31st is the case that matters: rent due on the 31st still falls due in
+ * February, on the 28th or 29th. Clamping to the last day of the month is what
+ * stops those months being silently skipped.
+ */
+export function occurrences(c, fromISO, toISO) {
+  const every = Math.max(0, Number(c.everyMonths) || 0)
+  const start = c.startDate || ''
+  const end = c.endDate || ''
+  if (!start) return []
+
+  // A one-off falls due once, on its start date.
+  if (!every) return start >= fromISO && start <= toISO ? [start] : []
+
+  const wanted = Math.min(Math.max(Number(c.dayOfMonth) || 1, 1), 31)
+  const [sy, sm] = start.split('-').map(Number)
+
+  const out = []
+  let year = sy
+  let month = sm - 1
+
+  // Bounded so a bad everyMonths can never spin forever.
+  for (let guard = 0; guard < 1200; guard += 1) {
+    const lastDay = new Date(year, month + 1, 0).getDate()
+    const iso = isoDate(new Date(year, month, Math.min(wanted, lastDay)))
+
+    if (iso > toISO) break
+    if (end && iso > end) break
+    // The first month can produce a date before the commitment began.
+    if (iso >= fromISO && iso >= start) out.push(iso)
+
+    month += every
+    while (month > 11) {
+      month -= 12
+      year += 1
+    }
+  }
+
+  return out
+}
+
+/**
+ * What needs paying or chasing, soonest first.
+ *
+ * Each commitment contributes its oldest *unsettled* date, not its next one:
+ * an EMI missed three months ago is more worth showing than next month's rent,
+ * and `missed` says how many instalments went by unrecorded.
+ */
+export function dueList(state, { today = todayISO(), horizonDays = 45 } = {}) {
+  const horizon = addDays(today, horizonDays)
+  const catName = Object.fromEntries(state.categories.map((c) => [c.id, c.name]))
+  const accName = Object.fromEntries(state.accounts.map((a) => [a.id, a.name]))
+
+  const rows = []
+
+  for (const c of state.commitments ?? []) {
+    if (c.active === false) continue
+
+    const settledTo = c.lastSettledOn || ''
+    const pending = occurrences(c, c.startDate || '', horizon).filter((d) => !settledTo || d > settledTo)
+    if (!pending.length) continue
+
+    const due = pending[0]
+    const daysAway = daysBetween(today, due)
+    const remindDays = Number(c.remindDays) || 3
+
+    // Counted against today, never against the horizon. Counting the whole
+    // pending list would make "how many were missed" grow whenever the caller
+    // looked further ahead, which is not a property a count of the past
+    // should have.
+    const overdueCount = pending.filter((d) => d < today).length
+
+    rows.push({
+      ...c,
+      due,
+      daysAway,
+      overdueCount,
+      // How many others are also past due, besides the one being shown.
+      missed: Math.max(overdueCount - 1, 0),
+      overdue: daysAway < 0,
+      dueToday: daysAway === 0,
+      // "Soon" is per commitment: an EMI may want a week, the wifi bill a day.
+      soon: daysAway > 0 && daysAway <= remindDays,
+      needsAttention: daysAway <= remindDays,
+      categoryName: catName[c.categoryId] ?? '',
+      accountName: accName[c.accountId] ?? '',
+      ...loanProgress(state, c),
+    })
+  }
+
+  return rows.sort((a, b) => a.due.localeCompare(b.due))
+}
+
+/**
+ * How much of a borrowed or lent sum is left.
+ *
+ * Summed from the bills actually recorded against it rather than a running
+ * total someone maintains, so it cannot drift from the ledger.
+ */
+export function loanProgress(state, commitment) {
+  const total = Number(commitment.totalAmount) || 0
+  if (total <= 0) return { total: 0, paid: 0, outstanding: 0, tracksBalance: false }
+
+  const paid = sum((state.companyExpenses ?? []).filter((e) => e.commitmentId === commitment.id))
+  return {
+    total,
+    paid,
+    outstanding: Math.max(total - paid, 0),
+    tracksBalance: true,
+  }
+}
+
+/** Just the ones worth interrupting someone about. */
+export function dueSoon(state, options) {
+  return dueList(state, options).filter((r) => r.needsAttention)
+}
+
 /**
  * The last twelve months of movement, for the trend on the company dashboard.
  * Months with nothing in them are still returned, so the shape of a quiet month

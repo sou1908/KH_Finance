@@ -31,15 +31,22 @@ const blank = () => ({
   description: '',
   amount: '',
   billNo: '',
+  // Set when this bill settles a reminder, so an EMI keeps an audit trail and
+  // its remaining balance stays a sum rather than a hand-kept figure.
+  commitmentId: '',
   note: '',
   attachments: [],
 })
 
-export default function CompanyExpenseDialog({ existing, onClose }) {
+export default function CompanyExpenseDialog({ existing, preset, onSaved, onClose }) {
   const state = useApp()
   const { accounts, offices, add, update } = state
 
-  const [form, setForm] = useState(() => (existing ? { ...blank(), ...existing } : blank()))
+  // `preset` fills the form from a due reminder. Every field stays editable —
+  // the rent may have gone up, and the bill in hand is what is true.
+  const [form, setForm] = useState(() =>
+    existing ? { ...blank(), ...existing } : { ...blank(), ...preset },
+  )
   const [error, setError] = useState('')
 
   const heads = headsOfKind(state, 'company')
@@ -47,10 +54,13 @@ export default function CompanyExpenseDialog({ existing, onClose }) {
   // contractors, so neither list clutters the other's form.
   const vendors = vendorsOfKind(state, 'company')
 
-  // A bill already on file may name a vendor that was never saved to the list.
-  // It has to stay editable rather than being silently blanked on save.
+  // A bill already on file — or a reminder being settled — may name someone who
+  // was never saved to the list. The box has to open as text, or the name is
+  // silently dropped: a select whose value is not among its options renders
+  // blank, and the bill saves with nobody on it.
+  const startingVendor = existing?.vendor ?? preset?.vendor ?? ''
   const [typingVendor, setTypingVendor] = useState(
-    () => Boolean(existing?.vendor) && !vendors.some((v) => v.name === existing.vendor),
+    () => Boolean(startingVendor) && !vendors.some((v) => v.name === startingVendor),
   )
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }))
 
@@ -80,6 +90,10 @@ export default function CompanyExpenseDialog({ existing, onClose }) {
 
     if (existing) update('companyExpenses', record)
     else add('companyExpenses', record)
+
+    // Only after the bill is genuinely saved. A cancelled form must leave the
+    // reminder standing rather than marking it paid.
+    if (onSaved) onSaved(record)
     onClose()
   }
 

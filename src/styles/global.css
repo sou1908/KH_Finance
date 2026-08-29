@@ -486,6 +486,73 @@ button.sync-pill:hover { border-color: rgba(255, 255, 255, 0.3); color: #fff; }
   background: var(--rule);
 }
 
+/* The due reminder. Amber when something is coming, red when it is late — and
+   absent entirely the rest of the time, because a banner that is always there
+   stops being read. */
+.due-banner {
+  border: 1px solid var(--brand-orange);
+  border-left-width: 3px;
+  border-radius: var(--r);
+  background: color-mix(in srgb, var(--brand-orange) 6%, var(--surface));
+  padding: 12px 16px;
+}
+
+.due-banner.is-late {
+  border-color: var(--ember);
+  background: color-mix(in srgb, var(--ember) 9%, var(--surface));
+}
+
+.due-banner-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.due-banner-head strong { font-size: 14px; }
+
+.due-banner-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.due-banner-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+.due-banner-list .due-what { flex: 1; min-width: 140px; }
+.due-banner-list .figure { font-size: 13px; font-weight: 600; }
+.due-banner-list .due-date { min-width: 72px; text-align: right; }
+
+tr.is-late td { background: color-mix(in srgb, var(--ember) 4%, transparent); }
+
+/* Two mutually exclusive answers, where a dropdown of two would be worse. */
+.seg-field { display: flex; gap: 6px; }
+.seg-opt {
+  flex: 1;
+  padding: 9px 12px;
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  background: var(--paper);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.seg-opt:hover { border-color: var(--ink-3); color: var(--ink); }
+.seg-opt.is-active {
+  border-color: var(--brand-deep);
+  background: var(--brand-deep);
+  color: #fff;
+}
+
 /* ------------------------------------------------------------------ panels */
 
 .panel {

@@ -18,7 +18,8 @@
     "preview": "vite preview",
     "test:roles": "node server/roles.e2e.mjs",
     "test:selectors": "node src/store/selectors.e2e.mjs",
-    "test:company": "node src/store/company.e2e.mjs"
+    "test:company": "node src/store/company.e2e.mjs",
+    "test:due": "node src/store/due.e2e.mjs"
   },
   "dependencies": {
     "express": "^5.2.1",

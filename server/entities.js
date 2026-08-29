@@ -136,6 +136,27 @@ export const ENTITIES = {
     description: 'description',
     amount: 'amount',
     billNo: 'bill_no',
+    commitmentId: 'commitment_id',
+    note: 'note',
+  },
+  /** Money expected to move on a date. See the table comment in schema.js. */
+  commitments: {
+    id: 'id',
+    kind: 'kind',
+    name: 'name',
+    party: 'party',
+    amount: 'amount',
+    categoryId: 'category_id',
+    officeId: 'office_id',
+    accountId: 'account_id',
+    everyMonths: 'every_months',
+    dayOfMonth: 'day_of_month',
+    startDate: 'start_date',
+    endDate: 'end_date',
+    totalAmount: 'total_amount',
+    remindDays: 'remind_days',
+    lastSettledOn: 'last_settled_on',
+    active: 'active',
     note: 'note',
   },
 }
@@ -145,13 +166,16 @@ export const ATTACHABLE = ['projects', 'receipts', 'expenses', 'transfers', 'com
 
 // DECIMAL arrives as a string so precision is never lost in transit; the
 // browser wants numbers, and these are the fields to convert.
-const NUMERIC = new Set(['amount', 'rate', 'qty', 'usedQty', 'quotedAmount', 'openingBalance'])
-const BOOLEAN = new Set(['tracksInventory'])
-const NULLABLE_DATE = new Set(['startDate', 'date'])
+const NUMERIC = new Set([
+  'amount', 'rate', 'qty', 'usedQty', 'quotedAmount', 'openingBalance',
+  'totalAmount', 'everyMonths', 'dayOfMonth', 'remindDays',
+])
+const BOOLEAN = new Set(['tracksInventory', 'active'])
+const NULLABLE_DATE = new Set(['startDate', 'date', 'endDate', 'lastSettledOn'])
 // projectId is deliberately absent: on receipts and expenses the column is NOT
 // NULL, so turning an empty string into NULL there would fail the insert.
 const NULLABLE_REF = new Set([
-  'clientId', 'accountId', 'categoryId', 'officeId',
+  'clientId', 'accountId', 'categoryId', 'officeId', 'commitmentId',
   'fromAccountId', 'toAccountId',
   'fromProjectId', 'toProjectId', 'userId',
 ])
