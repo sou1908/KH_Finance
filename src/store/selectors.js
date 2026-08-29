@@ -866,6 +866,29 @@ export function dueSoon(state, options) {
 }
 
 /**
+ * What to put in front of someone, as notices.
+ *
+ * `key` identifies one occurrence, not one commitment — `emi:2026-09-05`. That
+ * is what lets September's EMI be dismissed while October's still arrives on
+ * its own, and what makes a dismissal worthless once the bill is actually paid,
+ * since the date it names never comes round again.
+ */
+export function notices(state, { today = todayISO() } = {}) {
+  return dueSoon(state, { today }).map((r) => ({
+    key: `${r.id}:${r.due}`,
+    commitmentId: r.id,
+    kind: r.kind,
+    urgency: r.overdue ? 'late' : r.dueToday ? 'today' : 'soon',
+    title: r.name,
+    party: r.party,
+    amount: Number(r.amount) || 0,
+    due: r.due,
+    daysAway: r.daysAway,
+    overdueCount: r.overdueCount,
+  }))
+}
+
+/**
  * The last twelve months of movement, for the trend on the company dashboard.
  * Months with nothing in them are still returned, so the shape of a quiet month
  * is visible rather than collapsed out of the chart.

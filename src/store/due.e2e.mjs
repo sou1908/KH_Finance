@@ -9,7 +9,7 @@
  * cases are where it would quietly go wrong: rent due on the 31st still falls
  * due in February, and an EMI missed in March must not be replaced by April's.
  */
-import { addDays, daysBetween, dueList, dueSoon, loanProgress, occurrences } from './selectors.js'
+import { addDays, daysBetween, dueList, dueSoon, loanProgress, notices, occurrences } from './selectors.js'
 
 let pass = 0, fail = 0
 const check = (l, ok, d = '') => { ok ? (pass++, console.log(`  PASS  ${l}`)) : (fail++, console.log(`  FAIL  ${l}${d ? ' — ' + d : ''}`)) }
@@ -126,6 +126,21 @@ check('two need attention, not three', soon.length === 2, soon.map((s) => s.name
 check('the EMI and the overdue loan', soon.some((s) => s.id === 'cm_emi') && soon.some((s) => s.id === 'cm_lent'))
 check('next month\'s rent is left alone', !soon.some((s) => s.id === 'cm_rent'))
 check('nothing at all when there are no commitments', dueSoon({ ...state, commitments: [] }, { today }).length === 0)
+
+console.log('\n=== notices, and what a dismissal is allowed to hide ===')
+const list = notices(state, { today })
+check('one notice per urgent item', list.length === 2, String(list.length))
+check('keyed by occurrence, not by commitment', list.every((n) => /:\d{4}-\d{2}-\d{2}$/.test(n.key)), JSON.stringify(list.map((n) => n.key)))
+check('the EMI notice names September', list.some((n) => n.key === 'cm_emi:2026-09-05'), JSON.stringify(list.map((n) => n.key)))
+check('urgency is plain enough to style on', list.map((n) => n.urgency).sort().join(',') === 'late,soon')
+
+// The point of keying by date: dismissing September must not silence October.
+const october = notices({ ...state, commitments: [{ ...state.commitments[0], lastSettledOn: '2026-09-05' }] }, { today: '2026-10-02' })
+check('next month is a different key entirely', october[0].key === 'cm_emi:2026-10-05', october[0]?.key)
+
+// And once it is actually paid, the key it was dismissed under never recurs.
+const paid = notices({ ...state, commitments: [{ ...state.commitments[0], lastSettledOn: '2026-09-05' }] }, { today })
+check('paying it removes the notice', !paid.some((n) => n.commitmentId === 'cm_emi'))
 
 console.log(`\n${pass} passed, ${fail} failed`)
 process.exit(fail ? 1 : 0)

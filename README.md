@@ -136,6 +136,29 @@ Two things the tests pin down, both of which were wrong first:
   Counting the whole pending list made "how many were missed" grow whenever the
   caller looked further ahead — not a property a count of the past should have.
 
+They surface in three places: a **popup** in the centre of the screen, a **bell**
+in the top bar that keeps the list, and a **banner** on both dashboards.
+
+The popup interrupts **once a day** and then gets out of the way. One that
+returned on every page load would be closed without reading inside a week. It is
+safe to dismiss quickly precisely because the bell keeps everything — nothing is
+lost by clicking past it.
+
+A dismissal is keyed by *occurrence*, `emi:2026-09-05`, not by commitment. That
+is what lets September's EMI be dismissed while October's still arrives on its
+own, and what makes a dismissal worthless once the bill is paid: the date it
+names never comes round again.
+
+Dismissals live in `localStorage`, never in the ledger. Dismissing a popup is
+not a fact about the business — it is one person on one device saying "yes, I
+have seen it". In the ledger it would sync to every other device and into a
+backup, and a restored backup would then hide a bill that still had not been
+paid.
+
+The bell's badge counts what is **outstanding, not unread**. A bill dismissed
+this morning has not gone away, and a badge that cleared on a glance would say
+it had.
+
 Reminders are **in-app only**. Nothing is emailed or messaged, because a timer
 inside the Node process would not fire: Passenger shuts the app down when idle.
 Pushing them out needs Hostinger's cron calling a daily endpoint, which is a

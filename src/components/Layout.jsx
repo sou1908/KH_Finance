@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import QuickAdd from './QuickAdd'
 import SyncStatus from './SyncStatus'
+import { NoticeBell, NoticePopup } from './Notices'
 import { useApp } from '../store/AppStore'
 import { useScope } from '../store/ScopeContext'
 import { moneyInHand } from '../store/selectors'
@@ -226,6 +227,7 @@ export default function Layout() {
                 </div>
               </>
             )}
+            <NoticeBell />
             <QuickAdd />
           </div>
         )}
@@ -234,6 +236,9 @@ export default function Layout() {
           <Outlet />
         </main>
       </div>
+
+      {/* Procurement never sees money, so it never sees a reminder about any. */}
+      {!auth.isProcurement && <NoticePopup />}
     </div>
   )
 }

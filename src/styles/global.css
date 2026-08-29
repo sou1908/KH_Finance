@@ -486,6 +486,99 @@ button.sync-pill:hover { border-color: rgba(255, 255, 255, 0.3); color: #fff; }
   background: var(--rule);
 }
 
+/* ------------------------------------------------------------- reminders */
+
+.bell-holder { position: relative; }
+
+.bell {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  background: var(--paper);
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.bell:hover { color: var(--ink); border-color: var(--ink-3); }
+.bell.has-notices { color: var(--brand-orange); border-color: var(--brand-orange); }
+
+.bell-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: var(--brand-orange);
+  color: #fff;
+  font-family: var(--font-data);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 17px;
+  text-align: center;
+}
+.bell-badge.is-late { background: var(--ember); }
+
+.notice-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(360px, calc(100vw - 32px));
+  max-height: min(420px, 70vh);
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--r);
+  box-shadow: 0 12px 32px rgba(14, 44, 52, 0.16);
+  z-index: 40;
+}
+
+.notice-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--rule);
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+}
+
+.notice-empty {
+  padding: 22px 16px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.notice-list { list-style: none; margin: 0; padding: 0; }
+
+.notice-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--rule);
+}
+.notice-row:last-child { border-bottom: 0; }
+.notice-row.is-late { background: color-mix(in srgb, var(--ember) 5%, transparent); }
+
+.notice-when {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  align-items: flex-start;
+  min-width: 92px;
+}
+.notice-what { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.notice-what strong { font-size: 13.5px; }
+.notice-row .figure { font-size: 13px; font-weight: 600; white-space: nowrap; }
+
 /* The due reminder. Amber when something is coming, red when it is late — and
    absent entirely the rest of the time, because a banner that is always there
    stops being read. */
